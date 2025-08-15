@@ -14,7 +14,7 @@ from google.cloud import bigquery
 )
 def ingest_data():
 
-    # @task.pyspark(conn_id='spark_cluster')
+    # @task
     # def download_dataset():
     #     # client = bigquery.Client()
 

@@ -6,10 +6,10 @@ def main():
         .appName("PySpark Example") \
         .getOrCreate()
     
-    df = spark.read.csv("./include/data.csv", header="true")
-    df.show()
+    # df = spark.read.csv("./include/data.csv", header="true")
+    # df.show()
     
-    spark.stop()
+    # spark.stop()
 
 if __name__ == "__main__":
     main()

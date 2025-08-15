@@ -1,4 +1,4 @@
 FROM quay.io/astronomer/astro-runtime:13.1.0-python-3.11
 
-RUN pip install pyspark==4.0.0 && \
+RUN pip install pyspark==3.5.6 && \
      pip install apache-airflow-providers-google==16.1.0 
