@@ -28,6 +28,7 @@ then
   # copy the data to the data HDFS directory
   hdfs dfs -copyFromLocal /opt/spark/data/* /opt/spark/data
   hdfs dfs -ls /opt/spark/data
+
   $HADOOP_HOME/sbin/start-yarn.sh
 
 elif [ "$SPARK_WORKLOAD" == "worker" ];

@@ -62,3 +62,5 @@ traitlets==5.8.0
     #   matplotlib-inline
 wcwidth==0.2.5
     # via prompt-toolkit
+google-cloud-bigquery==3.35.1
+db-dtypes==1.4.1

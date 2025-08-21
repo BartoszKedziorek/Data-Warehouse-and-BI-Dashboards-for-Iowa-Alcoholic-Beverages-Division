@@ -1,7 +1,7 @@
 FROM python:3.10-bullseye as spark-base
 
 ARG SPARK_VERSION=3.3.1
-ARG HADOOP_VERSION=3.3.4
+ARG HADOOP_VERSION=3.4.1
 
 
 # Install tools required by the OS
@@ -89,6 +89,8 @@ RUN ssh-keygen -t rsa -P '' -f ~/.ssh/id_rsa && \
   chmod 600 ~/.ssh/authorized_keys
 
 COPY ssh_config ~/.ssh/config
+
+ENV GOOGLE_APPLICATION_CREDENTIALS=/usr/local/airflow/include/secrets/google-api-key.json 
 
 # Copy appropriate entrypoint script
 COPY entrypoint-yarn.sh entrypoint.sh

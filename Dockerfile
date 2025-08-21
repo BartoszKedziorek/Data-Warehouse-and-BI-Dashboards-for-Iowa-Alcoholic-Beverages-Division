@@ -19,5 +19,6 @@ RUN apt-get update && \
 # Set JAVA_HOME
 ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
 ENV HADOOP_CONF_DIR /opt/hadoop/etc/hadoop
+ENV GOOGLE_APPLICATION_CREDENTIALS=/usr/local/airflow/include/secrets/google-api-key.json
 RUN export JAVA_HOME && export HADOOP_CONF_DIR 
 RUN export PATH=$JAVA_HOME/bin:$PATH
