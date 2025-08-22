@@ -4,6 +4,7 @@ import pandas as pd
 from pyspark.sql.types import StructField, StructType, StringType, DoubleType, IntegerType, DateType, DecimalType
 # from airflow.providers.apache.spark.operators.spark_submit import SparkSubmitOperator
 from google.cloud import bigquery
+from pyspark.sql import DataFrame
 import numpy as np
 from pyspark.sql import SparkSession
 import os
@@ -72,7 +73,11 @@ for i, df in enumerate(dataframes):
     df = df.replace([np.nan], [None])
     df_sp = spark.createDataFrame(df, schema=schema)
 
-    df_sp = df_sp.withColumn('state_bottle_cost', df_sp['state_bottle_cost'].cast(DecimalType(precision=7, scale=2)))
+    df_sp: DataFrame = df_sp.withColumn('state_bottle_cost', df_sp['state_bottle_cost'].cast(DecimalType(precision=7, scale=2)))
+    df_sp = df_sp.withColumn('state_bottle_retail', df_sp['state_bottle_retail'].cast(DecimalType(precision=7, scale=2)))
+    df_sp = df_sp.withColumn('sale_dollars', df_sp['sale_dollars'].cast(DecimalType(precision=9, scale=2)))
+    df_sp = df_sp.withColumn('volume_sold_liters', df_sp['volume_sold_liters'].cast(DecimalType(precision=7, scale=2)))
+    df_sp = df_sp.withColumn('volume_sold_gallons', df_sp['volume_sold_gallons'].cast(DecimalType(precision=7, scale=2)))
 
     df_sp.write \
         .format('parquet') \
