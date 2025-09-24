@@ -13,15 +13,23 @@ import os
 
 @dag(
     start_date=datetime(2024, 1, 1),
-    schedule=None,
+    schedule="@daily",
     catchup=False
 )
 def ingest_data():
 
     @task.pyspark(conn_id='spark_cluster')
     def check_any_data_in_hdfs(spark: SparkSession):
+        path = "ingest/raw_sales"    
+        jvm = spark._jvm
+        jsc = spark._jsc
 
-        df = spark.read.parquet('ingest/raw_sales')
+        fs = jvm.org.apache.hadoop.fs.FileSystem.get(jsc.hadoopConfiguration())
+
+        if not fs.exists(jvm.org.apache.hadoop.fs.Path(path)):
+            return False
+
+        df = spark.read.parquet(path)
 
         return df.count() != 0
     

@@ -1,8 +1,6 @@
-from datetime import datetime
 from google.cloud import bigquery
 import pandas as pd
 from pyspark.sql.types import StructField, StructType, StringType, DoubleType, IntegerType, DateType, DecimalType
-# from airflow.providers.apache.spark.operators.spark_submit import SparkSubmitOperator
 from google.cloud import bigquery
 from pyspark.sql import DataFrame
 import numpy as np
@@ -35,7 +33,7 @@ schema = StructType([
     StructField('date', DateType(), False),
     StructField('store_number', IntegerType(), False),
     StructField('store_name', StringType(), False),
-    StructField('address', StringType(), False),
+    StructField('address', StringType(), True),
     StructField('city', StringType(), True),
     StructField('zip_code', IntegerType(), True),
     StructField('store_location', StringType(), True),
@@ -46,7 +44,7 @@ schema = StructType([
     StructField('vendor_number', IntegerType(), False),
     StructField('vendor_name', StringType(), False),
     StructField('item_number', IntegerType(), False),
-    StructField('item_decription', StringType(), False),
+    StructField('item_description', StringType(), False),
     StructField('pack', IntegerType(), False),
     StructField('bottle_volume_ml', IntegerType(), False),
     StructField('state_bottle_cost', StringType(), False), # Decimal(7, 2)
@@ -64,13 +62,14 @@ for i, df in enumerate(dataframes):
     df['zip_code'] = df['zip_code'].str.split('.').apply(lambda x:  x if x is None else x[0]).astype('Int64')
     df['county_number'] = df['county_number'].astype(float).astype('Int64')
     df['category'] = df['category'].str.split('.').apply(lambda x: x[0]).astype(int)
-    df['vendor_number'] = df['vendor_number'].astype(int)
+    df['vendor_number'] = df['vendor_number'].str.split('.').apply(lambda x:  x if x is None else x[0]).astype('Int64')
     df['item_number'] = df['item_number'].astype(int)
     df['pack'] = df['pack'].astype(int)
     df['bottle_volume_ml'] = df['bottle_volume_ml'].astype(int)    
     df['bottles_sold'] = df['bottles_sold'].astype(int)
 
-    df = df.replace([np.nan], [None])
+    df: pd.DataFrame = df.replace([np.nan], [None])
+
     df_sp = spark.createDataFrame(df, schema=schema)
 
     df_sp: DataFrame = df_sp.withColumn('state_bottle_cost', df_sp['state_bottle_cost'].cast(DecimalType(precision=7, scale=2)))

@@ -65,6 +65,7 @@ services:
   triggerer:
     volumes:
       - hadoop_conf_vol:/opt/hadoop/etc/hadoop
+  
 
 volumes:
   hadoop_conf_vol:

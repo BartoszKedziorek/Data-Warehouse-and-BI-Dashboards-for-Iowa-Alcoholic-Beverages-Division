@@ -97,4 +97,7 @@ COPY entrypoint-yarn.sh entrypoint.sh
 
 EXPOSE 22
 
+RUN apt-get install -y libodbc2
+
+
 ENTRYPOINT ["./entrypoint.sh"]

@@ -1,7 +1,7 @@
 BEGIN TRAN create_etl_user;
 
 CREATE LOGIN etl_login
-WITH PASSWORD = 'IowaETL456&';
+WITH PASSWORD = 'IowaETL456';
 GO
 
 CREATE USER etl_user
