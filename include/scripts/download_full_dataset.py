@@ -19,7 +19,6 @@ client = bigquery.Client()
 query = """
 SELECT * FROM
 `iowa-sales-analytic-platform.temp_dataset.temp_sales_table`
-LIMIT 1000
 """
 
 query_job = client.query(query)
@@ -81,7 +80,7 @@ for i, df in enumerate(dataframes):
     df_sp.write \
         .format('parquet') \
         .option('path', 'ingest/raw_sales/') \
-        .mode("overwrite") \
+        .mode("append") \
         .save()
 
     print("{}. dataframe successfully saved!".format(i + 1))
