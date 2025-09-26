@@ -97,7 +97,12 @@ COPY entrypoint-yarn.sh entrypoint.sh
 
 EXPOSE 22
 
-RUN apt-get install -y libodbc2
+#RUN apt-get install -y libodbc2
+COPY install-mcs-odbc-driver.sh ./install-mcs-odbc-driver.sh
+RUN ./install-mcs-odbc-driver.sh
 
 
+RUN wget -O jdbc_files.zip https://go.microsoft.com/fwlink/?linkid=2330663 && \
+    unzip jdbc_files.zip -d ./jars && \
+    cp /opt/spark/jars/sqljdbc_13.2/enu/jars/mssql-jdbc-13.2.0.jre11.jar $SPARK_HOME/jars/
 ENTRYPOINT ["./entrypoint.sh"]

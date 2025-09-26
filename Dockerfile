@@ -37,6 +37,14 @@ RUN update-locale LANG=en_US.UTF-8
 COPY install-mcs-odbc-driver.sh ./install-mcs-odbc-driver.sh
 RUN ./install-mcs-odbc-driver.sh
 
+RUN apt-get update && \
+    apt-get install -y wget && \
+    apt-get install unzip
+
+RUN wget -O jdbc_files.zip https://go.microsoft.com/fwlink/?linkid=2330663 && \
+    mkdir ./jars && \
+    unzip jdbc_files.zip -d ./jars
+
 # MS SQL Server connection
 # RUN apt-get update && \
 #     apt-get install -y gnupg && \
