@@ -54,14 +54,22 @@ CREATE TABLE DimStore(
 	EndDate DATE NULL,
 	IsCurrent BIT NOT NULL,
 	CONSTRAINT PK_DimStore_StoreId PRIMARY KEY CLUSTERED(StoreId),
-	CONSTRAINT UQ_DimStoreSCD2 UNIQUE (StoreNumberDK, StoreName,
-									[Address], City, ZipCode, StartDate),
 	CONSTRAINT CHECK_StoreLocationIsValid CHECK(
 			(StoreLocation.Lat BETWEEN -90 AND 90)
 			AND
 			(StoreLocation.Long BETWEEN -180 AND 180)
 	)
 );
+
+ALTER TABLE dbo.DimStore
+ADD StoreLocationLongitude DECIMAL(19,15) NOT NULL;
+ALTER TABLE dbo.DimStore
+ADD StoreLocationLatitude DECIMAL(17,15) NOT NULL;
+
+ALTER TABLE dbo.DimStore
+ADD CONSTRAINT UQ_DimStoreSCD2 UNIQUE (StoreNumberDK, StoreName,
+									[Address], City, ZipCode, StartDate,
+									StoreLocationLongitude, StoreLocationLatitude)
 
 CREATE TABLE DimCounty(
 	CountyId TINYINT IDENTITY(1, 1) NOT NULL,
