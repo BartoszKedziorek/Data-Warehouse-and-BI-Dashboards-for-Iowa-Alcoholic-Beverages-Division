@@ -107,7 +107,7 @@ CREATE TABLE DimItem(
 
 CREATE TABLE DimPackaging(
 	PackagingId SMALLINT IDENTITY(1, 1) NOT NULL,
-	NumberOfBottlesInPack TINYINT NOT NULL,
+	NumberOfBottlesInPack SMALLINT NOT NULL,
 	BottleVolumeML INT NOT NULL,
 	CONSTRAINT PK_DimPackaging_PackagingId PRIMARY KEY CLUSTERED(PackagingId),
 	CONSTRAINT UQ_NumberOfBottlesInPack_BottleVolumeML UNIQUE (NumberOfBottlesInPack, BottleVolumeML),
