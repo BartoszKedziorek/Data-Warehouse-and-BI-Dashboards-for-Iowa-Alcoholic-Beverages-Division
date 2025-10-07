@@ -116,7 +116,7 @@ CREATE TABLE DimPackaging(
 CREATE TABLE FLiquorSales(
 	LiquorSalesId INT IDENTITY(1, 1) NOT NULL,
 	BottlesSold INT NOT NULL,
-	VolumeSoldLiters SMALLINT NOT NULL,
+	VolumeSoldLiters DECIMAL(8, 2) NOT NULL,
 	StateBottleCostUSD DECIMAL(8, 2) NOT NULL,
 	StateBottleRetailUSD DECIMAL(8, 2) NOT NULL,
 	RevenueUSD DECIMAL(9, 2) NOT NULL,
