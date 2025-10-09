@@ -13,6 +13,7 @@ from pyspark.sql import Row
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 import io
+from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
 
 # @asset(name="DimDateTable",schedule="@daily")
 # def dim_date_table_asset():
@@ -106,14 +107,12 @@ def create_date_table(spark: SparkSession):
 
     date_df.to_sql('DimDateTable', con=engine, schema='dbo', if_exists='append', index=False)
 
-    with io.open('/usr/local/airflow/include/scripts/sql/insert_unknown_into_date_table.sql', mode='r') as file:
-        sql = file.read()
-        
-        with engine.begin() as connection:
-
-            connection.execute(sql)
-
     return {'min_date': min_date, 'max_date': max_date}
 
-with DAG(dag_id='create_dim_date_table', schedule='@daily'):
-    create_date_table()
+with DAG(dag_id='create_dim_date_table', schedule='@daily',
+         template_searchpath="/usr/local/airflow/include/scripts/sql"):
+    insert_default_value = SQLExecuteQueryOperator(
+        task_id="insert_default_value_into_date_table", conn_id="data_warehouse_presentation_layer", sql="insert_unknown_into_date_table.sql"
+    )
+
+    create_date_table() >> insert_default_value
