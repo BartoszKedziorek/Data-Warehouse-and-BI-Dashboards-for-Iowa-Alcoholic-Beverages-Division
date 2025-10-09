@@ -9,15 +9,15 @@ CREATE TABLE DimDateTable(
 	DayOfWeekName VARCHAR(9) NOT NULL,
 	IsWeekend BIT NOT NULL,
 	AstronomicalSeasonNumber TINYINT NOT NULL,
-	AstronomicalSeasonName CHAR(6),
+	AstronomicalSeasonName CHAR(7) NOT NULL,
 	MonthNumber TINYINT NOT NULL,
 	MonthLongName VARCHAR(9) NOT NULL,
-	MonthShortName VARCHAR(4) NOT NULL,
+	MonthShortName VARCHAR(7) NOT NULL,
 	[Year] SMALLINT  NOT NULL,
 	YearMonth VARCHAR(7) NOT NULL,
 	CONSTRAINT PK_DimDateTable_DateId PRIMARY KEY CLUSTERED(DateId),
 	CONSTRAINT UQ_FullDate UNIQUE(FullDate),
-	CONSTRAINT CHECK_DayOfYearNumberBetween1and366 CHECK ( DayOfYearNumber BETWEEN 1 AND 366 ),
+	CONSTRAINT CHECK_DayOfYearNumberBetween1and366 CHECK ( DayOfYearNumber BETWEEN 1 AND 366 OR DayOfYearNumber = -1),
 	CONSTRAINT CHECK_DayOfMonthNumberIsValid CHECK (
 		CAST(
 			CASE
@@ -32,14 +32,16 @@ CREATE TABLE DimDateTable(
 					THEN 1
 				WHEN [Year] % 4 = 0 AND MonthNumber = 2
 					AND DayOfMonthNumber BETWEEN 1 AND 29
-					THEN 1 
+					THEN 1
+				WHEN MonthNumber = -1
+					THEN 1
 				ELSE 0
 			END 
 		AS BIT) = 1
 	),
-	CONSTRAINT CHECK_DayOfWeekNumberBetween1and7 CHECK (DayOfWeekNumber BETWEEN 1 AND 7),
-	CONSTRAINT CHECK_AstronomicalSeasonNumberBetween1and4 CHECK (AstronomicalSeasonNumber BETWEEN 1 AND 4),
-	CONSTRAINT CHECK_MonthNumberBetween1and12 CHECK (MonthNumber BETWEEN 1 AND 12)
+	CONSTRAINT CHECK_DayOfWeekNumberBetween1and7 CHECK (DayOfWeekNumber BETWEEN 1 AND 7 OR DayOfWeekNumber = -1),
+	CONSTRAINT CHECK_AstronomicalSeasonNumberBetween1and4 CHECK (AstronomicalSeasonNumber BETWEEN 1 AND 4 OR AstronomicalSeasonNumber = -1),
+	CONSTRAINT CHECK_MonthNumberBetween1and12 CHECK (MonthNumber BETWEEN 1 AND 12 OR MonthNumber = -1)
 );
 
 CREATE TABLE DimStore(

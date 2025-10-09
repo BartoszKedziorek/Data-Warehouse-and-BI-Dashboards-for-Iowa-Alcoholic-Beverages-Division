@@ -9,6 +9,10 @@ import pyodbc
 from airflow.hooks.base import BaseHook
 from sqlalchemy import create_engine
 from airflow.models.connection import Connection
+from pyspark.sql import Row
+from sqlalchemy import text
+from sqlalchemy.engine import Engine
+import io
 
 # @asset(name="DimDateTable",schedule="@daily")
 # def dim_date_table_asset():
@@ -16,7 +20,9 @@ from airflow.models.connection import Connection
 
 date_table_asset = Asset(name="DimDateTable")
 
-@task.pyspark(conn_id='spark_cluster')
+@task.pyspark(conn_id='spark_cluster', config_kwargs={
+    'files':'/opt/hadoop/etc/hadoop/yarn-site.xml',
+})
 def create_date_table(spark: SparkSession):
     
     spark_df = spark.read.parquet('ingest/raw_sales')
@@ -96,9 +102,16 @@ def create_date_table(spark: SparkSession):
 
     connection_url = f"mssql+pyodbc:///?odbc_connect={connection_string}"
 
-    engine = create_engine(connection_url, fast_executemany=True)
+    engine: Engine = create_engine(connection_url, fast_executemany=True)
 
     date_df.to_sql('DimDateTable', con=engine, schema='dbo', if_exists='append', index=False)
+
+    with io.open('/usr/local/airflow/include/scripts/sql/insert_unknown_into_date_table.sql', mode='r') as file:
+        sql = file.read()
+        
+        with engine.begin() as connection:
+
+            connection.execute(sql)
 
     return {'min_date': min_date, 'max_date': max_date}
 

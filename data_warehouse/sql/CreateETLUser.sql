@@ -13,35 +13,49 @@ GRANT SELECT ON OBJECT::dbo.DimCounty
 	TO etl_user;
 GRANT INSERT ON OBJECT::dbo.DimCounty
 	TO etl_user;
+GRANT ALTER ON OBJECT::dbo.DimCounty
+	TO etl_user;
 
 GRANT SELECT ON OBJECT::DimDateTable
 	TO etl_user;
 GRANT INSERT ON OBJECT::DimDateTable
+	TO etl_user;
+GRANT ALTER ON OBJECT::DimDateTable
 	TO etl_user;
 
 GRANT SELECT ON OBJECT::dbo.DimPackaging
 	TO etl_user;
 GRANT INSERT ON OBJECT::dbo.DimPackaging
 	TO etl_user;
+GRANT ALTER ON OBJECT::dbo.DimPackaging
+	TO etl_user;
 
 GRANT SELECT ON OBJECT::dbo.DimVendor
 	TO etl_user;
 GRANT INSERT ON OBJECT::dbo.DimVendor
+	TO etl_user;
+GRANT ALTER ON OBJECT::dbo.DimVendor
 	TO etl_user;
 
 GRANT SELECT ON OBJECT::dbo.DimItem
 	TO etl_user;
 GRANT INSERT ON OBJECT::dbo.DimItem
 	TO etl_user;
+GRANT ALTER ON OBJECT::dbo.DimItem
+	TO etl_user;
 
 GRANT SELECT ON OBJECT::dbo.DimStore
 	TO etl_user;
 GRANT INSERT ON OBJECT::dbo.DimStore
 	TO etl_user;
+GRANT ALTER ON OBJECT::dbo.DimStore
+	TO etl_user;
 
 GRANT SELECT ON OBJECT::dbo.FLiquorSales
 	TO etl_user;
 GRANT INSERT ON OBJECT::dbo.FLiquorSales
+	TO etl_user;
+GRANT ALTER ON OBJECT::dbo.FLiquorSales
 	TO etl_user;
 
 
