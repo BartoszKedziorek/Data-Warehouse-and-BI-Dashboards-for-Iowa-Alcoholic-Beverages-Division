@@ -7,11 +7,14 @@ from pyspark.sql.functions import min
 from airflow.hooks.base import BaseHook
 from airflow.models.connection import Connection
 from pyspark.sql import functions as F
+from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
+
 
 
 @dag(dag_id='update_item_dim',
      start_date=datetime(2024, 1, 1),
-     schedule="@daily"
+     schedule="@daily",
+     template_searchpath="/usr/local/airflow/include/scripts/sql"
      )
 
 def update_item_dim():
@@ -34,6 +37,10 @@ def update_item_dim():
         jars='jars/sqljdbc_13.2/enu/jars/mssql-jdbc-13.2.0.jre11.jar'
     )
 
-    create_item_dim
+    insert_default_value = SQLExecuteQueryOperator(
+        task_id="insert_default_value_into_item_dim", conn_id="data_warehouse_presentation_layer", sql="insert_unknown_into_item_dim.sql"
+    )
+
+    create_item_dim >> insert_default_value
 
 update_item_dim()

@@ -10,10 +10,12 @@ from pyspark.sql import functions as F
 from google.cloud import bigquery
 import pyodbc
 from sqlalchemy import create_engine
+from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
 
 @dag(dag_id='update_packaging_dim',
      start_date=datetime(2024, 1, 1),
-     schedule="@daily"
+     schedule="@daily",
+     template_searchpath="/usr/local/airflow/include/scripts/sql"
      )
 def update_packaging_dim():
 
@@ -51,8 +53,11 @@ def update_packaging_dim():
 
         df.to_sql('DimPackaging', con=engine, schema='dbo', if_exists='append', index=False)
 
+    insert_default_value = SQLExecuteQueryOperator(
+        task_id="insert_default_value_into_store_dim", conn_id="data_warehouse_presentation_layer", sql="insert_unknown_into_packaging_dim.sql"
+    )
 
-    create_packaging_dim()
+    create_packaging_dim() >> insert_default_value
 
 
 update_packaging_dim()
