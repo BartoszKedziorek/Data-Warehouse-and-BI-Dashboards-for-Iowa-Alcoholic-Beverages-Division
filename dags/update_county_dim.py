@@ -10,6 +10,7 @@ from pyspark.sql import functions as F
 from google.cloud import bigquery
 import pyodbc
 from sqlalchemy import create_engine
+import io
 
 @dag(dag_id='update_county_dim',
      start_date=datetime(2024, 1, 1),
@@ -59,6 +60,14 @@ def update_county_dim():
         engine = create_engine(connection_url, fast_executemany=True)
 
         df.to_sql('DimCounty', con=engine, schema='dbo', if_exists='append', index=False)
+
+        with io.open('/usr/local/airflow/include/scripts/sql/insert_unknown_into_county_dim.sql', mode='r') as file:
+            sql = file.read()
+        
+            with engine.begin() as connection:
+
+                connection.execute(sql)
+
 
 
     create_county_dim()

@@ -74,9 +74,9 @@ ADD CONSTRAINT UQ_DimStoreSCD2 UNIQUE (StoreNumberDK, StoreName,
 									StoreLocationLongitude, StoreLocationLatitude)
 
 CREATE TABLE DimCounty(
-	CountyId TINYINT IDENTITY(1, 1) NOT NULL,
+	CountyId SMALLINT IDENTITY(1, 1) NOT NULL,
 	CountyName VARCHAR(15) NOT NULL,
-	CountyNumber VARCHAR(3) NOT NULL,
+	CountyNumber VARCHAR(7) NOT NULL,
 	CONSTRAINT PK_DimCounty_CountyId PRIMARY KEY CLUSTERED(CountyId),
 	CONSTRAINT UQ_CountyName UNIQUE(CountyName),
 	CONSTRAINT UQ_CountyNumber UNIQUE(CountyNumber)
@@ -128,7 +128,7 @@ CREATE TABLE FLiquorSales(
 	InvoiceNumber VARCHAR(13) NOT NULL,
 	DateId SMALLINT NOT NULL,
 	StoreId INT NOT NULL,
-	CountyId TINYINT NOT NULL,
+	CountyId SMALLINT NOT NULL,
 	VendorId SMALLINT NOT NULL,
 	ItemId INT NOT NULL,
 	PackagingId SMALLINT NOT NULL,
