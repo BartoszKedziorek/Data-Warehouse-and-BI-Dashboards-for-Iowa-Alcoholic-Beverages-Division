@@ -11,10 +11,12 @@ from google.cloud import bigquery
 import pyodbc
 from sqlalchemy import create_engine
 import io
+from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
 
 @dag(dag_id='update_county_dim',
      start_date=datetime(2024, 1, 1),
-     schedule="@daily"
+     schedule="@daily",
+     template_searchpath="/usr/local/airflow/include/scripts/sql"
      )
 def update_county_dim():
 
@@ -61,16 +63,13 @@ def update_county_dim():
 
         df.to_sql('DimCounty', con=engine, schema='dbo', if_exists='append', index=False)
 
-        with io.open('/usr/local/airflow/include/scripts/sql/insert_unknown_into_county_dim.sql', mode='r') as file:
-            sql = file.read()
-        
-            with engine.begin() as connection:
 
-                connection.execute(sql)
+    insert_default_value = SQLExecuteQueryOperator(
+        task_id="insert_default_value_into_county_dim", conn_id="data_warehouse_presentation_layer", sql="insert_unknown_into_county_dim.sql"
+    )
 
 
-
-    create_county_dim()
+    create_county_dim() >> insert_default_value
 
 
 
