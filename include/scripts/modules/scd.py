@@ -83,6 +83,22 @@ def create_scd_from_input(spark: SparkSession, input_df: DataFrame, attributes_c
 
     return final_scd_df
 
+
+def get_oldest_records_from_scd(scd_df: DataFrame, attributes_cols_without_natural_key:str,
+                                 natural_key_column: str) -> DataFrame:
+    
+    scd_min_start_date = scd_df.groupBy(natural_key_column).agg(F.min('start_date').alias('start_date'))
+
+    oldest_records_from_scd_df = scd_df.alias('nn') \
+                                .join(scd_min_start_date.alias('nsm'),
+                                      (scd_min_start_date['start_date'] == scd_df['start_date']) &
+                                       (scd_min_start_date[natural_key_column] == scd_df[natural_key_column]),
+                                       how='inner') \
+                                .select(*([scd_df[col] for col in attributes_cols_without_natural_key] + [scd_df['start_date'], scd_df['end_date'],scd_df['is_current'], f'nn.{natural_key_column}']))
+    
+    return oldest_records_from_scd_df
+
+
 # W przypadku kiedy mamy nowy rekord z inną wartością i jest tylko jeden
 def merge_last_scd_record_with_oldest_scd_record_from_new_data_both_having_different_attibutes(
         spark: SparkSession, old_scd: DataFrame,
@@ -94,18 +110,10 @@ def merge_last_scd_record_with_oldest_scd_record_from_new_data_both_having_diffe
 
     current_records_old_scd = old_scd.where("is_current == TRUE")
     
-    new_scd_min_start_date = new_scd.groupBy(natural_key_column).agg(F.min('start_date').alias('start_date'))
-
     attributes_cols_without_natural_key = copy(attributes_cols)
     attributes_cols_without_natural_key.remove(natural_key_column)
-
-    oldest_records_from_new_scd = new_scd.alias('nn') \
-                                .join(new_scd_min_start_date.alias('nsm'),
-                                      (new_scd_min_start_date['start_date'] == new_scd['start_date']) &
-                                       (new_scd_min_start_date[natural_key_column] == new_scd[natural_key_column]),
-                                       how='inner') \
-                                .select(*([new_scd[col] for col in attributes_cols_without_natural_key] + [new_scd['start_date'], new_scd['end_date'],new_scd['is_current'], f'nn.{natural_key_column}']))
     
+    oldest_records_from_new_scd = get_oldest_records_from_scd(new_scd, attributes_cols_without_natural_key, natural_key_column)
     
     merege_for_update_df = current_records_old_scd.join(oldest_records_from_new_scd, on=natural_key_column, how='inner')
 
@@ -122,6 +130,11 @@ def merge_last_scd_record_with_oldest_scd_record_from_new_data_both_having_diffe
 
 
 
+# def merge_last_scd_record_with_scd_records_from_new_data_both_having_different_attibutes(
+#         spark: SparkSession, old_scd: DataFrame,
+#           new_records: DataFrame, attributes_cols: List[str],
+#           date_col: str, natural_key_column: str, final_scd_schema: StructType) -> DataFrame:
+    
 
 
 

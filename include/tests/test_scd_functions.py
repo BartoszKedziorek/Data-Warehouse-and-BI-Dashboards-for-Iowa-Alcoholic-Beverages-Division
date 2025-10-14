@@ -1,12 +1,14 @@
 import pytest
 from pyspark.sql import SparkSession
 from scripts.modules.scd import create_scd_from_input, \
-                                merge_last_scd_record_with_oldest_scd_record_from_new_data_both_having_different_attibutes
+                                merge_last_scd_record_with_oldest_scd_record_from_new_data_both_having_different_attibutes, \
+                                get_oldest_records_from_scd
 from pyspark.sql.types import StructType, StructField, DateType, IntegerType, StringType, BooleanType, Row
 import datetime
 import pytest_check as check
 import pyspark.sql.functions as F
 from typing import List
+from copy import copy
 
 class TestSCD:
     spark: SparkSession
@@ -20,6 +22,10 @@ class TestSCD:
         
         cls.attributes_cols: List[str] = ['store_number', 'store_name', 'address',
                                                            'city', 'zip_code', 'store_location']
+
+        attributes_cols_without_natural_key = copy(cls.attributes_cols)
+        attributes_cols_without_natural_key.remove('store_number')
+        cls.attributes_cols_without_natural_key = attributes_cols_without_natural_key
 
         cls.final_scd_schema: StructType = StructType([
             StructField('store_number', IntegerType(), False),
@@ -209,3 +215,103 @@ class TestSCD:
         check.equal(second_record['is_current'], True)
 
     
+    def test_get_oldest_records_from_scd(self):
+        scd = self.spark.createDataFrame([
+            Row(store_number=2502, store_name='HY-VEE WINE AND SPIRITS (1022) / ANKENY',
+                address='410 NORTH ANKENY BLVD', city='ANKENY',
+                zip_code=50021, store_location='POINT(-93.602561976 41.73460601)',
+                start_date=datetime.date(2024, 11, 12),end_date=datetime.date(2024, 11, 27), is_current=False),
+            Row(store_number=2502, store_name='HY-VEE WINE AND SPIRITS (1022) / ANKENY CHANGE 1',
+                address='410 NORTH ANKENY BLVD', city='ANKENY',
+                zip_code=50021, store_location='POINT(-93.602561976 41.73460601)',
+                start_date=datetime.date(2024, 11, 27), end_date=None, is_current=True)
+        ])
+
+        oldedst_records = get_oldest_records_from_scd(scd, self.attributes_cols_without_natural_key, 'store_number')
+
+        record = oldedst_records.where(F.col('start_date') == F.lit('2024-11-12')).collect()[0]
+
+        check.equal(record['store_number'], 2502)
+        check.equal(record['store_name'], 'HY-VEE WINE AND SPIRITS (1022) / ANKENY')
+        check.equal(record['zip_code'], 50021)
+        check.equal(record['store_location'], 'POINT(-93.602561976 41.73460601)')
+        check.equal(record['address'], '410 NORTH ANKENY BLVD')
+        check.equal(record['start_date'], datetime.date(2024, 11, 12))
+        check.equal(record['end_date'], datetime.date(2024, 11, 27))
+        check.equal(record['is_current'], False)
+
+
+
+
+    # # zmiana wartości atrybutów, w nowym scd jest dla sklepu więcej niż jedno entry
+    # def test_merge_last_scd_record_with_scd_records_from_new_data_both_having_different_attibutes__one_store(self):
+    #     old_scd = self.spark.createDataFrame([
+    #         Row(store_number=2502, store_name='HY-VEE WINE AND SPIRITS (1022) / ANKENY',
+    #             address='410 NORTH ANKENY BLVD', city='ANKENY',
+    #             zip_code=50021, store_location='POINT(-93.602561976 41.73460601)',
+    #             start_date=datetime.date(2024, 11, 12),end_date=datetime.date(2024, 11, 27), is_current=False),
+    #         Row(store_number=2502, store_name='HY-VEE WINE AND SPIRITS (1022) / ANKENY CHANGE 1',
+    #             address='410 NORTH ANKENY BLVD', city='ANKENY',
+    #             zip_code=50021, store_location='POINT(-93.602561976 41.73460601)',
+    #             start_date=datetime.date(2024, 11, 27), end_date=None, is_current=True)
+    #     ])
+
+    #     new_records = self.spark.createDataFrame([
+    #         Row(invoice_and_item_number='RINV-04934100010', date=datetime.date(2025, 1, 11),
+    #             store_number=2502, store_name='HY-VEE WINE AND SPIRITS (1022) / ANKENY CHANGE 2',
+    #             address='410 NORTH ANKENY BLVD', city='ANKENY',
+    #             zip_code=50021, store_location='POINT(-93.602561976 41.73460601)',
+    #             county_number=23, county='POLK',
+    #             category=1032100, category_name='IMPORTED VODKAS',
+    #             vendor_number=370, vendor_name='PERNOD RICARD USA',
+    #             item_number=34007, item_description='ABSOLUT SWEDISH VODKA 80PRF',
+    #             pack=12, bottle_volume_ml=1000,
+    #             state_bottle_cost='14.99', state_bottle_retail='22.49',
+    #             bottles_sold=12, sale_dollars='539.76',
+    #             volume_sold_liters='-24.0', volume_sold_gallons='-6.34'
+    #             ),
+    #         Row(invoice_and_item_number='RINV-04934100010', date=datetime.date(2025, 1, 12),
+    #             store_number=2502, store_name='HY-VEE WINE AND SPIRITS (1022) / ANKENY CHANGE 2',
+    #             address='410 NORTH ANKENY BLVD', city='ANKENY',
+    #             zip_code=50021, store_location='POINT(-93.602561976 41.73460601)',
+    #             county_number=23, county='POLK',
+    #             category=1032100, category_name='IMPORTED VODKAS',
+    #             vendor_number=370, vendor_name='PERNOD RICARD USA',
+    #             item_number=34007, item_description='ABSOLUT SWEDISH VODKA 80PRF',
+    #             pack=12, bottle_volume_ml=1000,
+    #             state_bottle_cost='14.99', state_bottle_retail='22.49',
+    #             bottles_sold=12, sale_dollars='539.76',
+    #             volume_sold_liters='-24.0', volume_sold_gallons='-6.34'
+    #             ),
+    #         Row(invoice_and_item_number='RINV-04934100010', date=datetime.date(2025, 1, 15),
+    #             store_number=2502, store_name='HY-VEE WINE AND SPIRITS (1022) / ANKENY CHANGE 3',
+    #             address='410 NORTH ANKENY BLVD', city='ANKENY',
+    #             zip_code=50021, store_location='POINT(-93.602561976 41.73460601)',
+    #             county_number=23, county='POLK',
+    #             category=1032100, category_name='IMPORTED VODKAS',
+    #             vendor_number=370, vendor_name='PERNOD RICARD USA',
+    #             item_number=34007, item_description='ABSOLUT SWEDISH VODKA 80PRF',
+    #             pack=12, bottle_volume_ml=1000,
+    #             state_bottle_cost='14.99', state_bottle_retail='22.49',
+    #             bottles_sold=12, sale_dollars='539.76',
+    #             volume_sold_liters='-24.0', volume_sold_gallons='-6.34'
+    #             ),
+    #         Row(invoice_and_item_number='RINV-04934100010', date=datetime.date(2025, 1, 17),
+    #             store_number=2502, store_name='HY-VEE WINE AND SPIRITS (1022) / ANKENY CHANGE 4',
+    #             address='410 NORTH ANKENY BLVD', city='ANKENY',
+    #             zip_code=50021, store_location='POINT(-93.602561976 41.73460601)',
+    #             county_number=23, county='POLK',
+    #             category=1032100, category_name='IMPORTED VODKAS',
+    #             vendor_number=370, vendor_name='PERNOD RICARD USA',
+    #             item_number=34007, item_description='ABSOLUT SWEDISH VODKA 80PRF',
+    #             pack=12, bottle_volume_ml=1000,
+    #             state_bottle_cost='14.99', state_bottle_retail='22.49',
+    #             bottles_sold=12, sale_dollars='539.76',
+    #             volume_sold_liters='-24.0', volume_sold_gallons='-6.34'
+    #             )
+    #     ])
+
+    #     merged_scd = merge_last_scd_record_with_scd_records_from_new_data_both_having_different_attibutes(
+    #         self.spark,old_scd, new_records, self.attributes_cols, 'date', 'store_number', self.final_scd_schema)
+
+
