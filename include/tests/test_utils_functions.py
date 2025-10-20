@@ -42,7 +42,7 @@ class TestUtils:
                 start_date=datetime.date(2024, 11, 27), end_date=None, is_current=True)
         ])
 
-        _, hash_math_df = replace_attributes_with_hash(self.spark, input_df, self.attributes_cols)
+        _, hash_math_df = replace_attributes_with_hash(input_df, self.attributes_cols)
 
         test_df = input_df.withColumn('tmp_hash', F.hash(*self.attributes_cols))
 
@@ -90,7 +90,7 @@ class TestUtils:
 
         df = df.drop(*self.attributes_cols)
 
-        decoded_df = replace_hash_with_attributes(self.spark, df, hash_math_df)
+        decoded_df = replace_hash_with_attributes(df, hash_math_df)
 
         input_df_record = input_df.where(F.col('start_date') == F.lit('2024-11-12')).collect()[0]
         decoded_df_record = decoded_df.where(F.col('start_date') == F.lit('2024-11-12')).collect()[0]

@@ -5,7 +5,7 @@ from typing import List, Tuple
 from copy import copy
 
 
-def replace_attributes_with_hash(spark: SparkSession, df: DataFrame, attributes_cols: List[str]) -> Tuple[DataFrame, DataFrame]:
+def replace_attributes_with_hash(df: DataFrame, attributes_cols: List[str]) -> Tuple[DataFrame, DataFrame]:
     df = df.withColumn('hashed_attributes_value', F.hash(*attributes_cols)) 
 
     hash_math_df = df.select(*attributes_cols) \
@@ -15,7 +15,7 @@ def replace_attributes_with_hash(spark: SparkSession, df: DataFrame, attributes_
 
     return df, hash_math_df
 
-def replace_hash_with_attributes(spark: SparkSession, df_with_hashed_attributes: DataFrame, hash_math_df: DataFrame) -> DataFrame:
+def replace_hash_with_attributes(df_with_hashed_attributes: DataFrame, hash_math_df: DataFrame) -> DataFrame:
     merge = df_with_hashed_attributes.alias('df').join(hash_math_df.alias('hd'), 'hashed_attributes_value', how='inner') \
                                     .drop(F.col('df_hashed_attributes_value')) \
                                     .drop(F.col('hd_hashed_attributes_value')) \
