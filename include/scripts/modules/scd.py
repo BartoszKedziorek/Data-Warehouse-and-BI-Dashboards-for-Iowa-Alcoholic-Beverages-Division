@@ -141,44 +141,44 @@ def merge_last_scd_record_with_scd_records_from_new_data_both_having_different_a
     return merge_for_insert_df
 
 
-# # najstarszy rekord z nowego scd ma takie same wartości atrybutów jak najnowszy ze startego scd 
-# def merge_last_scd_record_with_scd_records_from_new_data_both_having_same_attibutes(
-#         spark: SparkSession, old_scd: DataFrame,
-#           new_records: DataFrame, attributes_cols: List[str],
-#           date_col: str, natural_key_column: str, final_scd_schema: StructType) -> DataFrame:
+# najstarszy rekord z nowego scd ma takie same wartości atrybutów jak najnowszy ze startego scd 
+def merge_last_scd_record_with_scd_records_from_new_data_both_having_same_attibutes(
+        spark: SparkSession, old_scd: DataFrame,
+          new_records: DataFrame, attributes_cols: List[str],
+          date_col: str, natural_key_column: str, final_scd_schema: StructType) -> DataFrame:
     
-#     new_scd = create_scd_from_input(spark, new_records, attributes_cols, date_col,
-#                                      natural_key_column, final_scd_schema)
+    new_scd = create_scd_from_input(spark, new_records, attributes_cols, date_col,
+                                     natural_key_column, final_scd_schema)
     
-#     attributes_cols_without_natural_key = copy(attributes_cols)
-#     attributes_cols_without_natural_key.remove(natural_key_column)
+    attributes_cols_without_natural_key = copy(attributes_cols)
+    attributes_cols_without_natural_key.remove(natural_key_column)
 
-#     oldest_records_from_new_scd = get_oldest_records_from_scd(new_scd, attributes_cols_without_natural_key, natural_key_column)
+    oldest_records_from_new_scd = get_oldest_records_from_scd(new_scd, attributes_cols_without_natural_key, natural_key_column)
 
-#     current_records_old_scd = old_scd.where("is_current == TRUE")
+    current_records_old_scd = old_scd.where("is_current == TRUE")
 
-#     # new_scd_for_merge = new_scd.exceptAll(oldest_records_from_new_scd)
+    # new_scd_for_merge = new_scd.exceptAll(oldest_records_from_new_scd)
 
-#     new_scd_for_merge = new_scd.alias('nn').join(oldest_records_from_new_scd.alias('old'), on=natural_key_column, how='inner') \
-#                                 .where(F.col('nn.start_date') != F.col('old.start_date')) \
-#                                 .select(*([F.col(f"nn.{col}") for col in attributes_cols] + [F.col('nn.start_date'), F.col('nn.is_current'), F.col('nn.end_date')]))
+    new_scd_for_merge = new_scd.alias('nn').join(oldest_records_from_new_scd.alias('old'), on=natural_key_column, how='inner') \
+                                .where(F.col('nn.start_date') != F.col('old.start_date')) \
+                                .select(*([F.col(f"nn.{col}") for col in attributes_cols] + [F.col('nn.start_date'), F.col('nn.is_current'), F.col('nn.end_date')]))
 
-#     new_scd_for_merge.cache()
+    new_scd_for_merge.cache()
 
-#     second_oldest_records_from_new_scd = get_oldest_records_from_scd(new_scd_for_merge, attributes_cols_without_natural_key, natural_key_column)
+    second_oldest_records_from_new_scd = get_oldest_records_from_scd(new_scd_for_merge, attributes_cols_without_natural_key, natural_key_column)
 
-#     merege_for_update_df = current_records_old_scd.join(second_oldest_records_from_new_scd, on=natural_key_column, how='inner')
+    merege_for_update_df = current_records_old_scd.join(second_oldest_records_from_new_scd, on=natural_key_column, how='inner')
 
-#     merege_for_update_df = merege_for_update_df.drop(current_records_old_scd['end_date']) \
-#                                                 .withColumn('end_date', second_oldest_records_from_new_scd['start_date']) \
-#                                                .drop(current_records_old_scd['is_current']) \
-#                                                .withColumn('is_current', F.lit(False)) \
-#                                                .select(*(['is_current', 'end_date', current_records_old_scd['start_date'], current_records_old_scd[natural_key_column]] +
-#                                                           [current_records_old_scd[col] for col in attributes_cols_without_natural_key]))
-#     merege_for_update_df.cache()
+    merege_for_update_df = merege_for_update_df.drop(current_records_old_scd['end_date']) \
+                                                .withColumn('end_date', second_oldest_records_from_new_scd['start_date']) \
+                                               .drop(current_records_old_scd['is_current']) \
+                                               .withColumn('is_current', F.lit(False)) \
+                                               .select(*(['is_current', 'end_date', current_records_old_scd['start_date'], current_records_old_scd[natural_key_column]] +
+                                                          [current_records_old_scd[col] for col in attributes_cols_without_natural_key]))
+    merege_for_update_df.cache()
 
-#     merege_for_update_df = merege_for_update_df \
-#                         .select(sorted(merege_for_update_df.columns)) \
-#                         .union(new_scd_for_merge.select(sorted(new_scd_for_merge.columns)))
+    merege_for_update_df = merege_for_update_df \
+                        .select(sorted(merege_for_update_df.columns)) \
+                        .union(new_scd_for_merge.select(sorted(new_scd_for_merge.columns)))
 
-#     return merege_for_update_df
+    return merege_for_update_df
