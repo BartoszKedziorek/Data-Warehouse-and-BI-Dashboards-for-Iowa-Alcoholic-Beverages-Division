@@ -105,4 +105,8 @@ RUN ./install-mcs-odbc-driver.sh
 RUN wget -O jdbc_files.zip https://go.microsoft.com/fwlink/?linkid=2330663 && \
     unzip jdbc_files.zip -d ./jars && \
     cp /opt/spark/jars/sqljdbc_13.2/enu/jars/mssql-jdbc-13.2.0.jre11.jar $SPARK_HOME/jars/
+
+
+ENV SPARK_DAEMON_MEMORY=3g
+
 ENTRYPOINT ["./entrypoint.sh"]

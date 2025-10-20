@@ -13,7 +13,7 @@ then
   # start the master node processes
   hdfs --daemon start namenode
   hdfs --daemon start secondarynamenode
-  yarn --daemon start resourcemanager
+  yarn --daemon start resourcemanagers
 
   # create required directories
   while ! hdfs dfs -mkdir -p /spark-logs;
@@ -49,6 +49,7 @@ then
   echo "Exit loop"
 
   # start the spark history server
+  export SPARK_DAEMON_MEMORY="3g"
   start-history-server.sh
 fi
 
