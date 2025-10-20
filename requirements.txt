@@ -7,3 +7,5 @@ apache-airflow-providers-microsoft-mssql==4.3.2
 pyarrow==20.0.0
 google-cloud-bigquery==3.35.1
 pyodbc==5.2.0
+pytest==8.4.2
+pytest-check==2.6.0

@@ -65,3 +65,5 @@ wcwidth==0.2.5
 google-cloud-bigquery==3.35.1
 db-dtypes==1.4.1
 pyodbc==5.2.0
+pytest==8.4.2
+pytest-check==2.6.0
