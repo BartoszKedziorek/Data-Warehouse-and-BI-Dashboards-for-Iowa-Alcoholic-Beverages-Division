@@ -4,6 +4,7 @@ from pyspark.sql.types import StructField, StringType, StructType, IntegerType, 
 import pyspark.sql.functions as F
 from pyspark.sql import functions as F
 import sys
+from scripts.modules.scd import create_scd_from_input
 
 
 def remove_one_day_changes(df: DataFrame,
@@ -75,29 +76,19 @@ tmp_scd = remove_one_day_changes(tmp_scd, 'item_description')
 tmp_scd = remove_one_day_changes(tmp_scd, 'category')
 tmp_scd = remove_one_day_changes(tmp_scd, 'category_name')
 
-tmp_scd = tmp_scd.groupBy(["item_number", "item_description", "category",
-                            'category_name']).agg(F.min('date').alias('min_date1'))
+final_scd_df = create_scd_from_input(spark, tmp_scd, ['item_description', 'item_number', 'category', 'category_name'],
+                                     'date', 'item_number', final_scd_schema)
 
-while tmp_scd.count() != 0:
-    
-    merged_scd = tmp_scd.join(
-        other=tmp_scd.groupBy("item_number").agg(F.min('min_date1').alias('min_date2')),
-        on='item_number',
-        how='inner'
-    )
-    to_add = merged_scd.where('min_date1 = min_date2') 
-    final_scd_df = final_scd_df.union(
-        to_add.where('min_date1 = min_date2')
-        .drop('min_date2')
-        .withColumnRenamed('min_date1','start_date')
-        .withColumn('end_date', F.lit(None).cast(DateType()))
-        .withColumn('IsCurrent', F.lit(False))
-    )
-    merged_scd = merged_scd.where('min_date1 != min_date2')
-    tmp_scd = merged_scd.select(merged_scd.item_number, merged_scd.item_description,
-                                merged_scd.category, merged_scd.category_name, 
-                                 merged_scd.min_date1)
-    
+final_scd_df = final_scd_df.withColumnsRenamed({
+    'item_description': 'ItemName',
+    'item_number':'ItemNumberDK',
+    'category': 'CategoryNumberDK',
+    'category_name':'CategoryName',
+    'start_date':'StartDate',
+    'end_date':'EndDate',
+    'is_current':'IsCurrent'
+})
+
 
 host = sys.argv[1]
 database = sys.argv[3]
@@ -113,69 +104,5 @@ properties = {
     "encrypt": "false"
 }
 table_name = "DimItem"
-
-
-tmp_scd = final_scd_df
-final_scd_df = spark.createDataFrame([], schema=final_scd_schema)
-first_iteration = True
-
-while tmp_scd.count() != 0:
-    max_start_date = tmp_scd.groupBy("item_number").agg(F.max('start_date').alias('max_start_date'))
-
-    second_max_start_date = \
-        tmp_scd.join(max_start_date, 'item_number', how='inner') \
-            .where('start_date != max_start_date') \
-            .groupBy('item_number') \
-            .agg(F.max('start_date').alias('second_max_date'))
-    
-    if first_iteration == True:
-        add_to_scd = \
-            tmp_scd.join(max_start_date, on='item_number', how='inner') \
-            .where('max_start_date == start_date') \
-            .select(tmp_scd.item_number, tmp_scd.item_description,
-                    tmp_scd.category, tmp_scd.category_name,
-                     tmp_scd.start_date, tmp_scd.end_date, tmp_scd.is_current) \
-            .withColumn('is_current', F.lit(True))
-
-        final_scd_df = final_scd_df.union(add_to_scd)
-
-        first_iteration = False
-    
-
-    compare_dates_df = tmp_scd.join(
-        max_start_date, on='item_number', how='inner'
-    ).join(
-        second_max_start_date, on='item_number', how='inner'
-    ).where(
-        'start_date == second_max_date'
-    )
-
-    compare_dates_df = compare_dates_df.drop('end_date').withColumnRenamed('max_start_date', 'end_date')
-
-    final_scd_df = final_scd_df.union(
-        compare_dates_df.select(F.col('item_number'), F.col('item_description'),
-                                F.col('category'), F.col('category_name'),
-                                F.col('start_date'), F.col('end_date'), F.col('is_current'))
-    )
-
-    tmp_scd = tmp_scd.join(
-        max_start_date, on='item_number', how='inner'
-    ).where(
-        'start_date != max_start_date'
-    ).drop(
-        'max_start_date'
-    )
-
-
-final_scd_df = final_scd_df.withColumnsRenamed({
-    'item_description': 'ItemName',
-    'item_number':'ItemNumberDK',
-    'category': 'CategoryNumberDK',
-    'category_name':'CategoryName',
-    'start_date':'StartDate',
-    'end_date':'EndDate',
-    'is_current':'IsCurrent'
-})
-
 
 final_scd_df.write.jdbc(url=url, table=table_name, properties=properties, mode='append')
