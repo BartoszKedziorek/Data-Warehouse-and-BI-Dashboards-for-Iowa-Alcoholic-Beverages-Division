@@ -26,6 +26,10 @@ def update_store_dim():
     password = conn.password
     port = conn.port
 
+    @task.bash
+    def zip_modules():
+        return "cd /usr/local/airflow/include && zip -r /usr/local/airflow/include/scripts.zip ./scripts"
+
     create_store_dim = SparkSubmitOperator(
         task_id='create_store_dim',
         application='/usr/local/airflow/include/scripts/create_store_dim.py',
@@ -36,6 +40,7 @@ def update_store_dim():
         driver_memory='1024m',
         verbose=True,
         files='/opt/hadoop/etc/hadoop/yarn-site.xml,/opt/hadoop/etc/hadoop/core-site.xml,/usr/local/airflow/include/secrets/google-api-key.json#gcp-key.json',
+        py_files='/usr/local/airflow/include/scripts.zip',
         jars='jars/sqljdbc_13.2/enu/jars/mssql-jdbc-13.2.0.jre11.jar'
     )
 
@@ -43,7 +48,7 @@ def update_store_dim():
         task_id="insert_default_value_into_store_dim", conn_id="data_warehouse_presentation_layer", sql="insert_unknown_into_store_dim.sql"
     )
 
-    create_store_dim >> insert_default_value
+    zip_modules() >> create_store_dim >> insert_default_value
 
 
 
