@@ -18,6 +18,10 @@ import os
 )
 def ingest_data():
 
+    @task.bash
+    def zip_modules():
+        return "cd /usr/local/airflow/include && zip -r /usr/local/airflow/include/scripts.zip ./scripts"
+
     @task.pyspark(conn_id='spark_cluster')
     def check_any_data_in_hdfs(spark: SparkSession):
         path = "ingest/raw_sales"    
@@ -75,7 +79,8 @@ def ingest_data():
         env_vars={"GOOGLE_APPLICATION_CREDENTIALS": google_auth_credentials_env},
         deploy_mode='cluster',
         verbose=True,
-        files='/opt/hadoop/etc/hadoop/yarn-site.xml,/opt/hadoop/etc/hadoop/core-site.xml,/usr/local/airflow/include/secrets/google-api-key.json#gcp-key.json'
+        files='/opt/hadoop/etc/hadoop/yarn-site.xml,/opt/hadoop/etc/hadoop/core-site.xml,/usr/local/airflow/include/secrets/google-api-key.json#gcp-key.json',
+        py_files='/usr/local/airflow/include/scripts.zip',
     )
     
     @task.pyspark(conn_id='spark_cluster')
@@ -83,7 +88,7 @@ def ingest_data():
         print("xd")
         pass
     
-
+    zip_modules()
     data_check = check_any_data_in_hdfs()
     branch1 = branch_any_data_in_hdfs(data_check)
 
