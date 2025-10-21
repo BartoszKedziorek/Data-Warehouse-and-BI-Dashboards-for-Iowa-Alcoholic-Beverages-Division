@@ -13,6 +13,8 @@ def replace_attributes_with_hash(df: DataFrame, attributes_cols: List[str]) -> T
 
     df = df.drop(*attributes_cols)
 
+    hash_math_df = hash_math_df.distinct()
+
     return df, hash_math_df
 
 def replace_hash_with_attributes(df_with_hashed_attributes: DataFrame, hash_math_df: DataFrame) -> DataFrame:
