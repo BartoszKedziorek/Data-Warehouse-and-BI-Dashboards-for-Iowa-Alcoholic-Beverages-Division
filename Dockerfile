@@ -39,7 +39,8 @@ RUN ./install-mcs-odbc-driver.sh
 
 RUN apt-get update && \
     apt-get install -y wget && \
-    apt-get install unzip
+    apt-get install unzip && \
+    apt-get install zip
 
 RUN wget -O jdbc_files.zip https://go.microsoft.com/fwlink/?linkid=2330663 && \
     mkdir ./jars && \
