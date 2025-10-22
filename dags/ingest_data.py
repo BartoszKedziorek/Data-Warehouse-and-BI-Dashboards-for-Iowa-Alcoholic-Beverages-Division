@@ -5,11 +5,17 @@ import pandas as pd
 from pyspark.sql import SparkSession
 from pyspark.sql.types import StructField, StructType, StringType, DoubleType, IntegerType, DateType, DecimalType
 from airflow.providers.apache.spark.operators.spark_submit import SparkSubmitOperator
+from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
 from google.cloud import bigquery
 from pyspark.sql.functions import max
+from sqlalchemy import create_engine
 import numpy as np
 from decimal import Decimal
 import os
+from airflow.hooks.base import BaseHook
+from airflow.models.connection import Connection
+import pyodbc
+from sqlalchemy.engine import Engine
 
 @dag(
     start_date=datetime(2024, 1, 1),
@@ -17,6 +23,18 @@ import os
     catchup=False
 )
 def ingest_data():
+
+    conn: Connection =  BaseHook.get_connection('data_warehouse_presentation_layer')
+    host = conn.host
+    database = conn.schema
+    username = conn.login
+    password = conn.password
+    port = conn.port
+
+    connection_string = f'DRIVER={{/opt/microsoft/msodbcsql18/lib64/libmsodbcsql-18.5.so.1.1}};SERVER={host},{port};DATABASE={database};UID={username};PWD={password};TrustServerCertificate=yes'
+
+    conn: pyodbc.Connection = pyodbc.connect(connection_string)
+
 
     @task.bash
     def zip_modules():
@@ -44,31 +62,48 @@ def ingest_data():
             return 'check_new_data_in_bigquery'
         else:
             return 'submit_download_full_dataset'
+    
+    @task.python
+    def any_data_in_warehouse():
+        query = """
+        SELECT TOP 1 DateId FROM dbo.FLiquorSales 
+        """
+        result = conn.execute(query).fetchone()
+    
+        if result is None:
+            return 'create_dim_date'
+        else:
+            return 'check_new_data_in_bigquery'
 
 
-    @task.pyspark(conn_id='spark_cluster')
-    def check_new_data_in_bigquery(spark: SparkSession):
+    @task.python
+    def create_dim_date():
+        pass
+
+    @task.python
+    def update_dim_date():
+        pass
+
+
+    @task.python
+    def check_new_data_in_bigquery():
         client = bigquery.Client()
 
         bg_query = """
-        SELECT MAX(date) as max_date FROM iowa-sales-analytic-platform.temp_dataset.temp_sales_table
+        SELECT MAX(date) as max_date FROM `bigquery-public-data.iowa_liquor_sales.sales`
         """
         
-        max_date_bq = client.query(bg_query).result().to_dataframe()['max_date'].iloc[0]
+        max_date_bq = client.query(bg_query).result().to_dataframe()['max_date'].iloc[0]        
 
+        dw_query = """
+            SELECT FullDate FROM dbo.DimDateTable
+            WHERE DateId = (SELECT MAX(DateId) FROM dbo.FLiquorSales)
+        """
 
-        spark_df = spark.read.parquet('ingest/raw_sales')
-    
-        max_date_spark = spark_df.select(max('date').alias('max_date')).collect()[0]['max_date']
+        max_date_data_warehouse = conn.execute(dw_query).fetchone()[0]
 
-        return max_date_bq > max_date_spark
-
-    @task.branch
-    def branch_new_data_in_bigquery(val):
-        if val == True:
-            return 'download_new_records_from_dataset' 
-
-
+        if max_date_bq > max_date_data_warehouse:
+            return 'download_new_records_from_dataset'
 
     google_auth_credentials_env = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
 
@@ -88,26 +123,21 @@ def ingest_data():
         print("xd")
         pass
     
-    zip_modules()
-    data_check = check_any_data_in_hdfs()
-    branch1 = branch_any_data_in_hdfs(data_check)
+    
+    data_check = zip_modules() >> check_any_data_in_hdfs()
+    any_data_in_hdfs_check = branch_any_data_in_hdfs(data_check)
 
+    any_data_in_warehouse_check = any_data_in_warehouse()
     new_data_check = check_new_data_in_bigquery()
-    branch2 = branch_new_data_in_bigquery(new_data_check)
 
-    branch1 >> download_full_dataset
-    branch1 >> new_data_check
-    new_data_check >> branch2
-    branch2 >> download_new_records_from_dataset()
+    any_data_in_hdfs_check >> download_full_dataset
+    any_data_in_hdfs_check >> any_data_in_warehouse_check
 
-    # (
-    #     branch_any_data_in_hdfs(check_any_data_in_hdfs()) >>   
-    #     [download_full_dataset,
-    #      branch_new_data_in_bigquery(check_new_data_in_bigquery()) >> [download_new_records_from_dataset(),]    
-    #     ]
-    # )
-
- #   branch_new_data_in_bigquery(check_new_data_in_bigquery()) >> [download_new_records_from_dataset(),]
+    download_full_dataset >> any_data_in_warehouse_check
+    new_data_check >> download_new_records_from_dataset()
+    
+    any_data_in_warehouse_check >> new_data_check
+    any_data_in_warehouse_check >> create_dim_date()
 
 
 ingest_data()
