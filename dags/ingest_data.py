@@ -16,11 +16,16 @@ from airflow.hooks.base import BaseHook
 from airflow.models.connection import Connection
 import pyodbc
 from sqlalchemy.engine import Engine
+from airflow.sdk import task_group
+from airflow.utils.task_group import TaskGroup
+from dateutil.relativedelta import relativedelta
+from pyspark.sql import functions as F
 
 @dag(
     start_date=datetime(2024, 1, 1),
     schedule="@daily",
-    catchup=False
+    catchup=False,
+    template_searchpath="/usr/local/airflow/include/scripts/sql"
 )
 def ingest_data():
 
@@ -48,22 +53,17 @@ def ingest_data():
 
         fs = jvm.org.apache.hadoop.fs.FileSystem.get(jsc.hadoopConfiguration())
 
-        if not fs.exists(jvm.org.apache.hadoop.fs.Path(path)):
-            return False
-
-        df = spark.read.parquet(path)
-
-        return df.count() != 0
+        return fs.exists(jvm.org.apache.hadoop.fs.Path(path))
     
 
-    @task.branch
+    @task.branch(trigger_rule='one_success')
     def branch_any_data_in_hdfs(val):
         if val == True:
-            return 'check_new_data_in_bigquery'
+            return 'skip_download'
         else:
             return 'submit_download_full_dataset'
     
-    @task.python
+    @task.branch(trigger_rule='one_success')
     def any_data_in_warehouse():
         query = """
         SELECT TOP 1 DateId FROM dbo.FLiquorSales 
@@ -71,18 +71,9 @@ def ingest_data():
         result = conn.execute(query).fetchone()
     
         if result is None:
-            return 'create_dim_date'
+            return 'load_full_data_into_warehouse'
         else:
             return 'check_new_data_in_bigquery'
-
-
-    @task.python
-    def create_dim_date():
-        pass
-
-    @task.python
-    def update_dim_date():
-        pass
 
 
     @task.python
@@ -107,6 +98,10 @@ def ingest_data():
 
     google_auth_credentials_env = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
 
+    @task
+    def skip_download():
+        pass
+
     download_full_dataset = SparkSubmitOperator(
         task_id='submit_download_full_dataset',
         application='/usr/local/airflow/include/scripts/download_full_dataset.py',
@@ -117,27 +112,287 @@ def ingest_data():
         files='/opt/hadoop/etc/hadoop/yarn-site.xml,/opt/hadoop/etc/hadoop/core-site.xml,/usr/local/airflow/include/secrets/google-api-key.json#gcp-key.json',
         py_files='/usr/local/airflow/include/scripts.zip',
     )
+
+    download_new_records_from_dataset = SparkSubmitOperator(
+        task_id='download_new_records_from_dataset',
+        application='/usr/local/airflow/include/scripts/download_new_records_from_dataset.py',
+        conn_id='spark_cluster',
+        env_vars={"GOOGLE_APPLICATION_CREDENTIALS": google_auth_credentials_env},
+        application_args=[],
+        deploy_mode='cluster',
+        verbose=True,
+        files='/opt/hadoop/etc/hadoop/yarn-site.xml,/opt/hadoop/etc/hadoop/core-site.xml,/usr/local/airflow/include/secrets/google-api-key.json#gcp-key.json',
+        py_files='/usr/local/airflow/include/scripts.zip',
+    )
+
+    with TaskGroup('load_full_data_into_warehouse') as load_full_data_into_warehouse:
     
-    @task.pyspark(conn_id='spark_cluster')
-    def download_new_records_from_dataset(spark: SparkSession):
-        print("xd")
-        pass
-    
-    
-    data_check = zip_modules() >> check_any_data_in_hdfs()
+        with TaskGroup('create_store_dim_task') as create_store_dim_task:            
+
+            create_store_dim = SparkSubmitOperator(
+                task_id='create_store_dim',
+                application='/usr/local/airflow/include/scripts/create_store_dim.py',
+                conn_id='spark_cluster',
+                deploy_mode='cluster',
+                application_args=[host, str(port), database, username, password],
+                executor_memory='1024m',
+                driver_memory='1024m',
+                verbose=True,
+                files='/opt/hadoop/etc/hadoop/yarn-site.xml,/opt/hadoop/etc/hadoop/core-site.xml,/usr/local/airflow/include/secrets/google-api-key.json#gcp-key.json',
+                py_files='/usr/local/airflow/include/scripts.zip',
+                jars='jars/sqljdbc_13.2/enu/jars/mssql-jdbc-13.2.0.jre11.jar'
+            )
+
+            insert_default_value_store_dim = SQLExecuteQueryOperator(
+                task_id="insert_default_value_into_store_dim", conn_id="data_warehouse_presentation_layer", sql="insert_unknown_into_store_dim.sql"
+            )
+
+            create_store_dim >> insert_default_value_store_dim
+
+
+        with TaskGroup('create_item_dim_task') as create_item_dim_task:
+
+            create_item_dim = SparkSubmitOperator(
+                task_id='create_item_dim',
+                application='/usr/local/airflow/include/scripts/create_item_dim.py',
+                conn_id='spark_cluster',
+                deploy_mode='cluster',
+                application_args=[host, str(port), database, username, password],
+                verbose=True,
+                files='/opt/hadoop/etc/hadoop/yarn-site.xml,/opt/hadoop/etc/hadoop/core-site.xml,/usr/local/airflow/include/secrets/google-api-key.json#gcp-key.json',
+                py_files='/usr/local/airflow/include/scripts.zip',
+                jars='jars/sqljdbc_13.2/enu/jars/mssql-jdbc-13.2.0.jre11.jar'
+            )
+
+            insert_default_value_item_dim = SQLExecuteQueryOperator(
+                task_id="insert_default_value_into_item_dim", conn_id="data_warehouse_presentation_layer", sql="insert_unknown_into_item_dim.sql"
+            )
+
+            create_item_dim >> insert_default_value_item_dim
+
+
+        with TaskGroup('create_vendor_dim_task') as create_vendor_dim_task:
+
+            create_vendor_dim = SparkSubmitOperator(
+                task_id='create_vendor_dim',
+                application='/usr/local/airflow/include/scripts/create_vendor_dim.py',
+                conn_id='spark_cluster',
+                deploy_mode='cluster',
+                application_args=[host, str(port), database, username, password],
+                verbose=True,
+                files='/opt/hadoop/etc/hadoop/yarn-site.xml,/opt/hadoop/etc/hadoop/core-site.xml,/usr/local/airflow/include/secrets/google-api-key.json#gcp-key.json,',
+                py_files='/usr/local/airflow/include/scripts.zip',
+                jars='jars/sqljdbc_13.2/enu/jars/mssql-jdbc-13.2.0.jre11.jar'
+            )
+
+            insert_default_value_vendor_dim = SQLExecuteQueryOperator(
+                task_id="insert_default_value_into_store_dim", conn_id="data_warehouse_presentation_layer", sql="insert_unknown_into_vendor_dim.sql"
+            )
+
+            create_vendor_dim >> insert_default_value_vendor_dim
+
+
+        with TaskGroup('create_county_dim_task') as create_county_dim_task:
+        
+            @task
+            def create_county_dim():
+            
+                client = bigquery.Client()
+
+                query = """
+                SELECT county as `CountyName`, county_number as `CountyNumber`
+                FROM `bigquery-public-data.iowa_liquor_sales.sales` 
+                WHERE county_number IS NOT NULL
+                GROUP BY county, county_number
+                """
+                query_job = client.query(query)
+
+                result = query_job.result()
+
+                df = result.to_dataframe()
+
+                connection_string = f'DRIVER={{/opt/microsoft/msodbcsql18/lib64/libmsodbcsql-18.5.so.1.1}};SERVER={host},{port};DATABASE={database};UID={username};PWD={password};TrustServerCertificate=yes'
+
+                connection_url = f"mssql+pyodbc:///?odbc_connect={connection_string}"
+
+                engine = create_engine(connection_url, fast_executemany=True)
+
+                df.to_sql('DimCounty', con=engine, schema='dbo', if_exists='append', index=False)
+
+
+            insert_default_value_county_dim = SQLExecuteQueryOperator(
+                task_id="insert_default_value_into_county_dim", conn_id="data_warehouse_presentation_layer", sql="insert_unknown_into_county_dim.sql"
+            )
+        
+            create_county_dim() >> insert_default_value_county_dim
+
+
+        with TaskGroup('create_packaging_dim_task') as create_packaging_dim_task:
+            @task
+            def create_packaging_dim():
+            
+                client = bigquery.Client()
+
+                query = """
+                    SELECT nr.pack as `NumberOfBottlesInPack`,
+                        vol.bottle_volume_ml as `BottleVolumeML`
+                    FROM (SELECT DISTINCT pack  FROM `bigquery-public-data.iowa_liquor_sales.sales`) as `nr`
+                    CROSS JOIN
+                    (SELECT DISTINCT bottle_volume_ml  FROM `bigquery-public-data.iowa_liquor_sales.sales`) as `vol`
+                """
+
+                query_job = client.query(query)
+
+                result = query_job.result()
+
+                df = result.to_dataframe()
+
+                connection_string = f'DRIVER={{/opt/microsoft/msodbcsql18/lib64/libmsodbcsql-18.5.so.1.1}};SERVER={host},{port};DATABASE={database};UID={username};PWD={password};TrustServerCertificate=yes'
+
+                connection_url = f"mssql+pyodbc:///?odbc_connect={connection_string}"
+
+                engine = create_engine(connection_url, fast_executemany=True)
+
+                df.to_sql('DimPackaging', con=engine, schema='dbo', if_exists='append', index=False)
+
+            insert_default_value_store_dim = SQLExecuteQueryOperator(
+                task_id="insert_default_value_into_store_dim", conn_id="data_warehouse_presentation_layer", sql="insert_unknown_into_packaging_dim.sql"
+            )
+
+            create_packaging_dim() >> insert_default_value_store_dim 
+        
+
+        with TaskGroup('create_date_table_task') as create_date_table_task:
+                        
+            @task.pyspark(conn_id='spark_cluster', config_kwargs={
+                'files':'/opt/hadoop/etc/hadoop/yarn-site.xml',
+            })
+            def create_date_table(spark: SparkSession):
+                
+                spark_df = spark.read.parquet('ingest/raw_sales')
+
+                min_date = spark_df.select(F.min('date').alias('min_date')).collect()[0]['min_date']
+                max_date = spark_df.select(F.max('date').alias('max_date')).collect()[0]['max_date']
+                max_date = max_date + relativedelta(years=5)
+
+                date_df = pd.DataFrame({'FullDate': pd.date_range(min_date, max_date)})
+
+                date_df['DayOfYearNumber'] = date_df['FullDate'].dt.day_of_year
+                date_df['DayOfMonthNumber'] = date_df['FullDate'].dt.day
+                date_df['DayOfWeekNumber'] = date_df['FullDate'].dt.day_of_week + 1
+                date_df['DayOfWeekName'] = date_df['FullDate'].dt.weekday
+                date_df['IsWeekend'] = (date_df['FullDate'].dt.day_of_week == 5) | (date_df['FullDate'].dt.day_of_week == 6)
+
+                def season_name_function(my_date: pd.Timestamp):
+                    my_date = my_date.date()
+                    
+                    year = my_date.year
+                    start_spring = datetime(year, 3, 21).date()
+                    start_summer = datetime(year, 6, 22).date()
+                    start_autumn = datetime(year, 9, 23).date()
+                    start_winter = datetime(year, 12, 22).date()
+
+                    if start_spring <= my_date < start_summer:
+                        return 'spring'
+                    elif start_summer <= my_date < start_autumn:
+                        return 'summer'
+                    elif start_autumn <= my_date < start_winter:
+                        return 'autumn'
+                    else:
+                        return 'winter'
+
+                date_df['AstronomicalSeasonName'] = date_df['FullDate'].map(season_name_function)
+
+
+                def season_number_function(my_date: pd.Timestamp):
+                    my_date = my_date.date()
+
+                    year = my_date.year
+                    start_spring = datetime(year, 3, 21).date()
+                    start_summer = datetime(year, 6, 22).date()
+                    start_autumn = datetime(year, 9, 23).date()
+                    start_winter = datetime(year, 12, 22).date()
+
+                    if start_spring <= my_date < start_summer:
+                        return 1
+                    elif start_summer <= my_date < start_autumn:
+                        return 2
+                    elif start_autumn <= my_date < start_winter:
+                        return 3
+                    else:
+                        return 4
+                    
+                date_df['AstronomicalSeasonNumber'] = date_df['FullDate'].map(season_number_function)
+
+                date_df['MonthNumber'] = date_df['FullDate'].dt.month
+                date_df['MonthLongName'] = date_df['FullDate'].dt.month_name(locale='en_US.utf8')
+                date_df['MonthShortName'] = date_df['MonthLongName'].map({
+                                                                    "January": "Jan", "February": "Feb",
+                                                                    "March": "Mar", "April": "Apr",
+                                                                    "May": "May", "June": "Jun",
+                                                                    "July": "Jul", "August": "Aug",
+                                                                    "September": "Sep", "October": "Oct",
+                                                                    "November": "Nov", "December": "Dec"})
+                date_df['Year'] = date_df['FullDate'].dt.year
+                date_df['YearMonth'] = date_df['FullDate'].dt.strftime('%Y/%m')
+
+                conn: Connection =  BaseHook.get_connection('data_warehouse_presentation_layer')
+                server = conn.host
+                database = conn.schema
+                username = conn.login
+                password = conn.password
+                port = conn.port
+                connection_string = f'DRIVER={{/opt/microsoft/msodbcsql18/lib64/libmsodbcsql-18.5.so.1.1}};SERVER={server},{port};DATABASE={database};UID={username};PWD={password};TrustServerCertificate=yes'
+                conn = pyodbc.connect(connection_string)
+
+                connection_url = f"mssql+pyodbc:///?odbc_connect={connection_string}"
+
+                engine: Engine = create_engine(connection_url, fast_executemany=True)
+
+                date_df.to_sql('DimDateTable', con=engine, schema='dbo', if_exists='append', index=False)
+
+                return {'min_date': min_date, 'max_date': max_date}
+
+            insert_default_value_date_dim = SQLExecuteQueryOperator(
+                task_id="insert_default_value_into_date_table", conn_id="data_warehouse_presentation_layer", sql="insert_unknown_into_date_table.sql"
+            )
+
+            create_date_table() >> insert_default_value_date_dim
+
+        create_liqour_sales_fact_table = SparkSubmitOperator(
+            task_id='create_liqour_sales_fact_table',
+            application='/usr/local/airflow/include/scripts/create_liqour_sales_fact_table.py',
+            conn_id='spark_cluster',
+            deploy_mode='cluster',
+            application_args=[host, str(port), database, username, password],    
+            verbose=True,
+            files='/opt/hadoop/etc/hadoop/yarn-site.xml,/opt/hadoop/etc/hadoop/core-site.xml,/usr/local/airflow/include/secrets/google-api-key.json#gcp-key.json',
+            jars='jars/sqljdbc_13.2/enu/jars/mssql-jdbc-13.2.0.jre11.jar'
+        )
+
+        create_store_dim_task >> create_item_dim_task >> create_vendor_dim_task \
+            >> create_county_dim_task >> create_packaging_dim_task >> create_date_table_task \
+            >> create_liqour_sales_fact_table
+
+
+    skip_download_task = skip_download()
+    zip_modules_task = zip_modules()
+    data_check = check_any_data_in_hdfs()
+    zip_modules_task >> data_check
     any_data_in_hdfs_check = branch_any_data_in_hdfs(data_check)
 
     any_data_in_warehouse_check = any_data_in_warehouse()
     new_data_check = check_new_data_in_bigquery()
 
     any_data_in_hdfs_check >> download_full_dataset
-    any_data_in_hdfs_check >> any_data_in_warehouse_check
+    
+    any_data_in_hdfs_check >> [skip_download_task, download_full_dataset]
+    [skip_download_task, download_full_dataset] >> any_data_in_warehouse_check
 
-    download_full_dataset >> any_data_in_warehouse_check
-    new_data_check >> download_new_records_from_dataset()
+    new_data_check >> download_new_records_from_dataset
     
     any_data_in_warehouse_check >> new_data_check
-    any_data_in_warehouse_check >> create_dim_date()
+    any_data_in_warehouse_check >> load_full_data_into_warehouse
 
 
 ingest_data()

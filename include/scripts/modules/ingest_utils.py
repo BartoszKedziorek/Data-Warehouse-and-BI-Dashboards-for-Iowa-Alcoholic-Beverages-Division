@@ -8,7 +8,7 @@ from pyspark.sql import SparkSession
 import os
 
 
-def download_data_from_bq(spark: SparkSession, bq_client: bigquery.Client, query: str, dest_hdfs_path: str):
+def download_data_from_bq(spark: SparkSession, bq_client: bigquery.Client, query: str, dest_hdfs_path: str, write_mode: str):
     values = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
 
     query_job = bq_client.query(query)
@@ -70,5 +70,5 @@ def download_data_from_bq(spark: SparkSession, bq_client: bigquery.Client, query
         df_sp.write \
             .format('parquet') \
             .option('path', dest_hdfs_path) \
-            .mode("append") \
+            .mode(write_mode) \
             .save()

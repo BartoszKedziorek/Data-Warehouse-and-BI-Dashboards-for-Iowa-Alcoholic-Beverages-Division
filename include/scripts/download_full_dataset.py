@@ -25,4 +25,4 @@ AND EXTRACT(YEAR FROM date) = 2025
 
 dest_path = 'ingest/raw_sales/'
 
-download_data_from_bq(spark, client, query, dest_path)
+download_data_from_bq(spark, client, query, dest_path, 'append')
