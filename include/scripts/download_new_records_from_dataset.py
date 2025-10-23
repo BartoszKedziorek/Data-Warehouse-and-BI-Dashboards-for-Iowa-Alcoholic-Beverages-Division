@@ -1,0 +1,31 @@
+from google.cloud import bigquery
+import pandas as pd
+from pyspark.sql.types import StructField, StructType, StringType, DoubleType, IntegerType, DateType, DecimalType
+from google.cloud import bigquery
+from pyspark.sql import DataFrame
+import numpy as np
+from pyspark.sql import SparkSession
+import os
+from scripts.modules.ingest_utils import download_data_from_bq
+import sys
+
+values = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
+
+spark = SparkSession.builder \
+    .appName("Iowa Sales ETL") \
+    .getOrCreate()
+
+client = bigquery.Client()
+
+start_date = sys.argv[1]
+print(f'start_date = {start_date}')
+
+query = f"""
+SELECT * FROM
+`bigquery-public-data.iowa_liquor_sales.sales`
+WHERE date > '{start_date}'
+"""
+
+dest_path = 'ingest/new_sales/'
+
+download_data_from_bq(spark, client, query, dest_path, 'overwrite')

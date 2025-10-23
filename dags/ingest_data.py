@@ -20,6 +20,7 @@ from airflow.sdk import task_group
 from airflow.utils.task_group import TaskGroup
 from dateutil.relativedelta import relativedelta
 from pyspark.sql import functions as F
+from airflow.sdk import Variable
 
 @dag(
     start_date=datetime(2024, 1, 1),
@@ -76,7 +77,7 @@ def ingest_data():
             return 'check_new_data_in_bigquery'
 
 
-    @task.python
+    @task.branch
     def check_new_data_in_bigquery():
         client = bigquery.Client()
 
@@ -91,7 +92,9 @@ def ingest_data():
             WHERE DateId = (SELECT MAX(DateId) FROM dbo.FLiquorSales)
         """
 
-        max_date_data_warehouse = conn.execute(dw_query).fetchone()[0]
+        max_date_data_warehouse: datetime = conn.execute(dw_query).fetchone()[0]
+
+        Variable.set('max_date_data_warehouse', max_date_data_warehouse.strftime('%Y-%m-%d'))
 
         if max_date_bq > max_date_data_warehouse:
             return 'download_new_records_from_dataset'
@@ -118,7 +121,7 @@ def ingest_data():
         application='/usr/local/airflow/include/scripts/download_new_records_from_dataset.py',
         conn_id='spark_cluster',
         env_vars={"GOOGLE_APPLICATION_CREDENTIALS": google_auth_credentials_env},
-        application_args=[],
+        application_args=[Variable.get('max_date_data_warehouse'),],
         deploy_mode='cluster',
         verbose=True,
         files='/opt/hadoop/etc/hadoop/yarn-site.xml,/opt/hadoop/etc/hadoop/core-site.xml,/usr/local/airflow/include/secrets/google-api-key.json#gcp-key.json',
