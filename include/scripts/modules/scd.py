@@ -82,11 +82,8 @@ def get_oldest_records_from_scd(scd_df: DataFrame, attributes_cols_without_natur
 # W przypadku kiedy mamy nowy rekord z inną wartością i jest tylko jeden
 def merge_last_scd_record_with_oldest_scd_record_from_new_data_both_having_different_attibutes(
         spark: SparkSession, old_scd: DataFrame,
-          new_records: DataFrame, attributes_cols: List[str],
-          date_col: str, natural_key_column: str, final_scd_schema: StructType) -> DataFrame:
-    
-    new_scd = create_scd_from_input(spark, new_records, attributes_cols, date_col,
-                                     natural_key_column, final_scd_schema)
+          new_scd: DataFrame, attributes_cols: List[str],
+          natural_key_column: str) -> DataFrame:
 
     current_records_old_scd = old_scd.where("is_current == TRUE")
     
@@ -112,11 +109,8 @@ def merge_last_scd_record_with_oldest_scd_record_from_new_data_both_having_diffe
 
 def merge_last_scd_record_with_scd_records_from_new_data_both_having_different_attibutes(
         spark: SparkSession, old_scd: DataFrame,
-          new_records: DataFrame, attributes_cols: List[str],
-          date_col: str, natural_key_column: str, final_scd_schema: StructType) -> DataFrame:
-    
-    new_scd = create_scd_from_input(spark, new_records, attributes_cols, date_col,
-                                     natural_key_column, final_scd_schema)
+          new_scd: DataFrame, attributes_cols: List[str],
+            natural_key_column: str) -> DataFrame:
 
     attributes_cols_without_natural_key = copy(attributes_cols)
     attributes_cols_without_natural_key.remove(natural_key_column)
@@ -144,11 +138,8 @@ def merge_last_scd_record_with_scd_records_from_new_data_both_having_different_a
 # najstarszy rekord z nowego scd ma takie same wartości atrybutów jak najnowszy ze startego scd 
 def merge_last_scd_record_with_scd_records_from_new_data_both_having_same_attibutes(
         spark: SparkSession, old_scd: DataFrame,
-          new_records: DataFrame, attributes_cols: List[str],
-          date_col: str, natural_key_column: str, final_scd_schema: StructType) -> DataFrame:
-    
-    new_scd = create_scd_from_input(spark, new_records, attributes_cols, date_col,
-                                     natural_key_column, final_scd_schema)
+          new_scd: DataFrame, attributes_cols: List[str],
+          natural_key_column: str) -> DataFrame:
     
     attributes_cols_without_natural_key = copy(attributes_cols)
     attributes_cols_without_natural_key.remove(natural_key_column)
