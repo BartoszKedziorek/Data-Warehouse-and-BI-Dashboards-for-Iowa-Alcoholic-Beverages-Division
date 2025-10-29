@@ -12,6 +12,11 @@ import pyspark.sql.functions as F
 from typing import List
 from copy import copy
 import datetime
+from scripts.modules.scd import load_update_entries
+import os
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import Engine
+
 
 
 class TestSCD:
@@ -44,9 +49,62 @@ class TestSCD:
             StructField('is_current', BooleanType(), True)
         ])
 
+        cls.test_db_connection_url_pyodbc = os.environ.get('TEST_DB_CONNECTION_URL_PYODBC')
+        cls.test_db_connection_url_jdbc = os.environ.get('TEST_DB_CONNECTION_URL_JDBC')
+        
+        username = os.environ.get('TEST_DB_USER_NAME')
+        password = os.environ.get('TEST_DB_USER_PASSWORD')
+
+        cls.conn_properties  = {
+            "user": f"{username}",
+            "password": f"{password}", 
+            "trustServerCertificate": "true",
+        }
+
+        cls.test_db_engine: Engine = create_engine(cls.test_db_connection_url_pyodbc,connect_args=cls.conn_properties)
+
+
     @classmethod
     def teardown_class(cls):
         cls.spark.stop()
+
+    def setup_method(self, method):
+        with self.test_db_engine.begin() as cnx:
+            cnx.execute(text("DELETE FROM dbo.DimStore"))
+        # self.test_db_engine.connect().execute(text("DELETE FROM dbo.DimStore"))
+
+        scd = self.spark.createDataFrame([
+            Row(StoreNumberDK=2502, StoreName='HY-VEE WINE AND SPIRITS (1022) / ANKENY',
+                address='410 NORTH ANKENY BLVD', City='ANKENY',
+                ZipCode=50021, StoreLocation ='POINT(-93.602561976 41.73460601)',
+                StartDate=datetime.date(2024, 11, 12),EndDate=datetime.date(2024, 11, 27), IsCurrent=False),
+            Row(StoreNumberDK=2502, StoreName='HY-VEE WINE AND SPIRITS (1022) / ANKENY CHANGE 1',
+                address='410 NORTH ANKENY BLVD', City='ANKENY',
+                ZipCode=50021, StoreLocation ='POINT(-93.602561976 41.73460601)',
+                StartDate=datetime.date(2024, 11, 27), EndDate=None, IsCurrent=True),
+            Row(StoreNumberDK=4970, StoreName='JEFF\'S MARKET / WEST LIBERTY',
+                address='200, E 3RD ST', City='WEST LIBERTY',
+                ZipCode=52776, StoreLocation ='POINT(-91.261560959 41.569567007)',
+                StartDate=datetime.date(2025, 1, 11), EndDate=None, IsCurrent=True),
+            Row(StoreNumberDK=1234, StoreName='Test shop 123',
+                address='10 NORTH IOWA CITY BLVD', City='IOWA CITY',
+                ZipCode=12345, StoreLocation ='POINT(-93.602561976 41.73460601)',
+                StartDate=datetime.date(2025, 1, 15), EndDate=None, IsCurrent=True),
+        ]) 
+
+        long_col = F.expr("CASE WHEN StoreLocation != 'POINT EMPTY' THEN substring(split(StoreLocation, ' ')[0], 7, length(split(StoreLocation, ' ')[0]) - 5)" +
+                  "ELSE '-1.0' END")
+        lat_col = F.expr("CASE WHEN StoreLocation != 'POINT EMPTY' THEN substring(split(StoreLocation, ' ')[1], 0, length(split(StoreLocation, ' ')[1]) - 1)" + 
+                        "ELSE '-1.0' END")
+
+        scd = scd.withColumn('StoreLocationLongitude', long_col).withColumn('StoreLocationLatitude', lat_col)
+
+        scd.write.jdbc(url=self.test_db_connection_url_jdbc, table='DimStore', mode='append', properties=self.conn_properties)
+
+
+    def teardown_method(self, method):
+        with self.test_db_engine.begin() as cnx:
+            cnx.execute(text("DELETE FROM dbo.DimStore"))
 
 
     def test_create_scd_from_input_for_more_than_one_change(self):
@@ -368,4 +426,60 @@ class TestSCD:
         check.equal(third_scd_record['end_date'], None)
         check.equal(third_scd_record['is_current'], True)      
         
+
+    def test_load_update_entries_with_same_attributest(self):
+        scd_update_records = self.spark.createDataFrame([
+            Row(store_number=2502, store_name='HY-VEE WINE AND SPIRITS (1022) / ANKENY CHANGE 1',
+                address='410 NORTH ANKENY BLVD', city='ANKENY',
+                zip_code=50021, store_location='POINT(-93.602561976 41.73460601)',
+                start_date=datetime.date(2024, 11, 29), end_date=datetime.date(2024, 12, 22), is_current=False),
+            Row(store_number=4970, store_name='JEFF\'S MARKET / WEST LIBERTY',
+                address='200, E 3RD ST', city='WEST LIBERTY',
+                zip_code=52776, store_location='POINT(-91.261560959 41.569567007)',
+                start_date=datetime.date(2025, 1, 13), end_date=datetime.date(2025, 1, 29), is_current=False),
+        ])
+
+        load_update_entries(self.test_db_engine, scd_update_records, 'store_number',
+                                                 'StoreNumberDK', 'DimStore')
+
+        scd = self.spark.read.jdbc(url=self.test_db_connection_url_jdbc,
+                                    table="""(SELECT CAST([StoreLocation] AS VARCHAR(255)) as [StoreLocation], 
+                                            StoreNumberDK, StoreName, City, Address, ZipCode,
+                                            StoreLocationLongitude, StoreLocationLatitude,
+                                            StartDate, EndDate, IsCurrent
+                                             FROM [Iowa_Sales_Data_Warehouse_test].[dbo].[DimStore]) as [DimStore]""",
+                                              properties=self.conn_properties)
+        scd = scd.withColumn("StoreLocation", F.expr("substring(StoreLocation, 7, length(StoreLocation))"))
+
+        first_store_last_entry = scd.where('StoreNumberDK = 2502 AND StartDate = \'2024-11-27\'').collect()[0]
+        scd.cache()
+        second_store_last_entry = scd.where('StoreNumberDK = 4970 AND StartDate = \'2025-1-11\'').collect()[0]
+        third_store_last_entry = scd.where('StoreNumberDK = 1234 AND StartDate = \'2025-1-15\'').collect()[0]
+
+        check.equal(first_store_last_entry['StoreName'], 'HY-VEE WINE AND SPIRITS (1022) / ANKENY CHANGE 1')
+        check.equal(first_store_last_entry['Address'], '410 NORTH ANKENY BLVD')
+        check.equal(first_store_last_entry['ZipCode'], 50021)
+        check.equal(first_store_last_entry['City'], 'ANKENY')
+        check.equal(first_store_last_entry['StoreLocation'], '(-93.602561976 41.73460601)')
+        check.equal(first_store_last_entry['StartDate'], datetime.date(2024, 11, 27))
+        check.equal(first_store_last_entry['EndDate'], datetime.date(2024, 12, 22))
+        check.equal(first_store_last_entry['IsCurrent'], False)
+        
+        check.equal(second_store_last_entry['StoreName'], 'JEFF\'S MARKET / WEST LIBERTY')
+        check.equal(second_store_last_entry['Address'], '200, E 3RD ST')
+        check.equal(second_store_last_entry['ZipCode'], 52776)
+        check.equal(second_store_last_entry['City'], 'WEST LIBERTY')
+        check.equal(second_store_last_entry['StoreLocation'], '(-91.261560959 41.569567007)')
+        check.equal(second_store_last_entry['StartDate'], datetime.date(2025, 1, 11))
+        check.equal(second_store_last_entry['EndDate'], datetime.date(2025, 1, 29))
+        check.equal(second_store_last_entry['IsCurrent'], False)
+
+        check.equal(third_store_last_entry['StoreName'], 'Test shop 123')
+        check.equal(third_store_last_entry['Address'], '10 NORTH IOWA CITY BLVD')
+        check.equal(third_store_last_entry['ZipCode'], 12345)
+        check.equal(third_store_last_entry['City'], 'IOWA CITY')
+        check.equal(third_store_last_entry['StoreLocation'], '(-93.602561976 41.73460601)')
+        check.equal(third_store_last_entry['StartDate'], datetime.date(2025, 1, 15))
+        check.equal(third_store_last_entry['EndDate'], None)
+        check.equal(third_store_last_entry['IsCurrent'], True)
 
