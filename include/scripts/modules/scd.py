@@ -212,11 +212,12 @@ def load_update_entries(engine: Engine, scd_entries: DataFrame,
             = {natural_key_value} AND
             IsCurrent = CAST(1 as bit)   
         """
-
-    for entry in iter_entries:
-        with engine.begin() as cnx:
+    
+    with engine.begin() as cnx:
+        for entry in iter_entries:
             cnx.execute(text(query.format(table=table_name, end_date_value=entry['end_date'],
                         natural_key_value=entry[natural_key_new_entries])))
+
 
 def filter_scd_by_natural_key(scd: DataFrame, natural_keys_dataframe: DataFrame, natural_key: str):
     return scd.alias('t1').join(natural_keys_dataframe.alias('t2'), on=natural_key, how='inner') \
