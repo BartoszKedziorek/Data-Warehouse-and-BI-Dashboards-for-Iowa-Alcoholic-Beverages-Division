@@ -21,6 +21,7 @@ from airflow.utils.task_group import TaskGroup
 from dateutil.relativedelta import relativedelta
 from pyspark.sql import functions as F
 from airflow.sdk import Variable
+from sqlalchemy import text
 
 @dag(
     start_date=datetime(2024, 1, 1),
@@ -74,10 +75,37 @@ def ingest_data():
         if result is None:
             return 'load_full_data_into_warehouse'
         else:
-            return 'check_new_data_in_bigquery'
+            return 'new_data_in_hdfs_check'
 
 
-    @task.branch
+    @task.pyspark(task_id='new_data_in_hdfs_check')
+    def new_data_in_hdfs(spark: SparkSession):
+        new_records = spark.read.parquet('ingest/new_sales/')
+
+        max_date_hdfs = new_records.select(F.max('date').alias('max_date')).collect()[0]['max_date']
+
+        dw_query = """
+            SELECT FullDate FROM dbo.DimDateTable
+            WHERE DateId = (SELECT MAX(DateId) FROM dbo.FLiquorSales)
+        """
+
+        max_date_data_warehouse: datetime = conn.execute(dw_query).fetchone()[0]
+
+        Variable.set('max_date_data_warehouse', max_date_data_warehouse.strftime('%Y-%m-%d'))
+
+        return max_date_hdfs > max_date_data_warehouse
+
+
+    @task.branch(trigger_rule='one_success')
+    def branch_new_data_in_hdfs(val: bool):
+        if val == True:
+            return 'update_data_in_warehouse'
+        else:
+            return 'check_new_data_in_bigquery'    
+
+
+
+    @task.branch(trigger_rule='one_success')
     def check_new_data_in_bigquery():
         client = bigquery.Client()
 
@@ -377,6 +405,126 @@ def ingest_data():
             >> create_county_dim_task >> create_packaging_dim_task >> create_date_table_task \
             >> create_liqour_sales_fact_table
 
+    with TaskGroup('update_data_in_warehouse') as update_data_in_warehouse:
+        update_store_dim = SparkSubmitOperator(
+            task_id='update_store_dim',
+            application='/usr/local/airflow/include/scripts/update_store_dim.py',
+            conn_id='spark_cluster',
+            deploy_mode='cluster',
+            application_args=[host, str(port), database, username, password],    
+            verbose=True,
+            files='/opt/hadoop/etc/hadoop/yarn-site.xml,/opt/hadoop/etc/hadoop/core-site.xml,/usr/local/airflow/include/secrets/google-api-key.json#gcp-key.json',
+            jars='jars/sqljdbc_13.2/enu/jars/mssql-jdbc-13.2.0.jre11.jar',
+            py_files='/usr/local/airflow/include/scripts.zip',
+            trigger_rule='none_failed_min_one_success'
+        )
+
+        
+        # @task
+        # def update_packaging_dim():
+        
+        #     client = bigquery.Client()
+
+        #     query = """
+        #         SELECT nr.pack as `NumberOfBottlesInPack`,
+        #             vol.bottle_volume_ml as `BottleVolumeML`
+        #         FROM (SELECT DISTINCT pack  FROM `bigquery-public-data.iowa_liquor_sales.sales`) as `nr`
+        #         CROSS JOIN
+        #         (SELECT DISTINCT bottle_volume_ml  FROM `bigquery-public-data.iowa_liquor_sales.sales`) as `vol`
+        #     """
+
+        #     query_job = client.query(query)
+
+        #     result = query_job.result()
+
+        #     df = result.to_dataframe()
+
+        #     connection_string = f'DRIVER={{/opt/microsoft/msodbcsql18/lib64/libmsodbcsql-18.5.so.1.1}};SERVER={host},{port};DATABASE={database};UID={username};PWD={password};TrustServerCertificate=yes'
+
+        #     connection_url = f"mssql+pyodbc:///?odbc_connect={connection_string}"
+
+        #     engine: Engine = create_engine(connection_url, fast_executemany=True)
+
+        #     query = "SELECT NumberOfBottlesInPack, BottleVolumeML FROM dbo.DimPackaging"
+
+        #     packaging_dim_database = pd.read_sql(query, engine) 
+
+        #     merge_df = pd.merge(left=df,
+        #                         right=packaging_dim_database,
+        #                         how='left',
+        #                         left_on=['NumberOfBottlesInPack','BottleVolumeML'],
+        #                         right_on=['NumberOfBottlesInPack','BottleVolumeML'],
+        #                         suffixes=('_l','_r')
+        #                         )
+
+        
+        #     if len(new_records) != 0:
+                
+        #         new_records = merge_df.iloc[merge_df['NumberOfBottlesInPack_r'].isnull()]
+
+        #         new_records = new_records.drop('NumberOfBottlesInPack_r', axis=1)
+        #         new_records = new_records.drop('BottleVolumeML_r', axis=1)
+
+        #         new_records = new_records.rename({
+        #             'NumberOfBottlesInPack_l':'NumberOfBottlesInPack',
+        #             'BottleVolumeML_l':'BottleVolumeML'
+        #         })
+
+        #         new_records.to_sql('DimPackaging', con=engine, schema='dbo', if_exists='append', index=False)
+ 
+        # @task
+        # def update_county_dim():
+        #     client = bigquery.Client()
+
+        #     query = """
+        #         SELECT county as `CountyName`, county_number as `CountyNumber`
+        #         FROM `bigquery-public-data.iowa_liquor_sales.sales` 
+        #         WHERE county_number IS NOT NULL
+        #         GROUP BY county, county_number
+        #     """
+
+        #     query_job = client.query(query)
+
+        #     result = query_job.result()
+
+        #     df = result.to_dataframe()
+
+        #     connection_string = f'DRIVER={{/opt/microsoft/msodbcsql18/lib64/libmsodbcsql-18.5.so.1.1}};SERVER={host},{port};DATABASE={database};UID={username};PWD={password};TrustServerCertificate=yes'
+
+        #     connection_url = f"mssql+pyodbc:///?odbc_connect={connection_string}"
+
+        #     engine: Engine = create_engine(connection_url, fast_executemany=True)
+
+        #     query = "SELECT CountyName, CountyNumber FROM dbo.DimCounty"
+
+        #     county_dim_database = pd.read_sql(query, engine) 
+
+        #     merge_df = pd.merge(left=df,
+        #                         right=county_dim_database,
+        #                         how='left',
+        #                         left_on=['CountyName','CountyNumber'],
+        #                         right_on=['CountyName','CountyNumber'],
+        #                         suffixes=('_l','_r')
+        #                         )
+
+        
+        #     if len(new_records) != 0:
+                
+        #         new_records = merge_df.iloc[merge_df['CountyName_r'].isnull()]
+
+        #         new_records = new_records.drop('CountyName_r', axis=1)
+        #         new_records = new_records.drop('CountyNumber_r', axis=1)
+
+        #         new_records = new_records.rename({
+        #             'CountyNumber_l':'CountyNumber',
+        #             'CountyName_l':'CountyName'
+        #         })
+
+        #         new_records.to_sql('DimCounty', con=engine, schema='dbo', if_exists='append', index=False)
+
+
+        update_store_dim
+
 
     skip_download_task = skip_download()
     zip_modules_task = zip_modules()
@@ -392,10 +540,21 @@ def ingest_data():
     any_data_in_hdfs_check >> [skip_download_task, download_full_dataset]
     [skip_download_task, download_full_dataset] >> any_data_in_warehouse_check
 
-    new_data_check >> download_new_records_from_dataset
+
     
-    any_data_in_warehouse_check >> new_data_check
+
+    new_data_in_hdfs_check = new_data_in_hdfs()
+    check_new_data_in_hdfs_task = branch_new_data_in_hdfs(new_data_in_hdfs_check)
+    new_data_check >> download_new_records_from_dataset
+    check_new_data_in_hdfs_task >> [new_data_check, update_data_in_warehouse]
+
+
+    download_new_records_from_dataset >> update_data_in_warehouse
+    #  >> update_data_in_warehouse
+
+    any_data_in_warehouse_check >> new_data_in_hdfs_check
     any_data_in_warehouse_check >> load_full_data_into_warehouse
+    
 
 
 ingest_data()
