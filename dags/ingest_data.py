@@ -80,7 +80,19 @@ def ingest_data():
 
     @task.pyspark(task_id='new_data_in_hdfs_check')
     def new_data_in_hdfs(spark: SparkSession):
-        new_records = spark.read.parquet('ingest/new_sales/')
+        path = 'ingest/new_sales/'
+
+        jvm = spark._jvm
+        jsc = spark._jsc
+
+        fs = jvm.org.apache.hadoop.fs.FileSystem.get(jsc.hadoopConfiguration())
+
+        path_exists = fs.exists(jvm.org.apache.hadoop.fs.Path(path))
+        
+        if not path_exists:
+            return False
+
+        new_records = spark.read.parquet(path)
 
         max_date_hdfs = new_records.select(F.max('date').alias('max_date')).collect()[0]['max_date']
 
