@@ -47,8 +47,8 @@ tmp_scd = remove_one_day_changes(tmp_scd, 'city', 'store_number', 'date')
 attrib_cols = ['store_number', 'store_location', 'store_name', 'address', 'zip_code',
                'city']
 
-new_scd_reords_df = create_scd_from_input(spark, tmp_scd, attrib_cols,
-                                     'date', 'store_number', final_scd_schema)
+new_scd_reords_df = create_scd_from_input(tmp_scd, attrib_cols,
+                                     'date', 'store_number')
 
 new_scd_reords_df, hash_table_new_scd = replace_attributes_with_hash(new_scd_reords_df, ['store_location',
                                                                                           'store_name', 'address',

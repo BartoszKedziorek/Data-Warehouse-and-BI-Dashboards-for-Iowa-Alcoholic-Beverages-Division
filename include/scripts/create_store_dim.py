@@ -39,8 +39,8 @@ tmp_scd = remove_one_day_changes(tmp_scd, 'address', 'store_number', 'date')
 tmp_scd = remove_one_day_changes(tmp_scd, 'zip_code', 'store_number', 'date')
 tmp_scd = remove_one_day_changes(tmp_scd, 'city', 'store_number', 'date')
 
-final_scd_df = create_scd_from_input(spark, tmp_scd, ['store_number', 'store_location', 'store_name', 'address', 'zip_code', 'city'],
-                                     'date', 'store_number', final_scd_schema)
+final_scd_df = create_scd_from_input(tmp_scd, ['store_number', 'store_location', 'store_name', 'address', 'zip_code', 'city'],
+                                     'date', 'store_number')
 
 final_scd_df = final_scd_df.withColumnsRenamed({
     'store_name': 'StoreName',

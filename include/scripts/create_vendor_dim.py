@@ -23,9 +23,9 @@ final_scd_schema = StructType([
     StructField('is_current', BooleanType(), True)
 ])
 
-final_scd_df = create_scd_from_input(spark, tmp_scd, 
+final_scd_df = create_scd_from_input(tmp_scd, 
                                      ['vendor_name', 'vendor_number'],
-                                     'date', 'vendor_number', final_scd_schema)
+                                     'date', 'vendor_number')
 
 final_scd_df = final_scd_df.withColumnsRenamed({
     'vendor_name': 'VendorName',

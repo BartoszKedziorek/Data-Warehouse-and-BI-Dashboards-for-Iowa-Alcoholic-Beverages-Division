@@ -177,8 +177,8 @@ class TestSCD:
                 )
         ])
 
-        df = create_scd_from_input(self.spark, input_df, self.attributes_cols,
-                                    'date', 'store_number', self.final_scd_schema)
+        df = create_scd_from_input(input_df, self.attributes_cols,
+                                    'date', 'store_number')
         df.count()
         df.cache()
 

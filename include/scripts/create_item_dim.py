@@ -33,8 +33,8 @@ tmp_scd = remove_one_day_changes(tmp_scd, 'item_description', 'item_number', 'da
 tmp_scd = remove_one_day_changes(tmp_scd, 'category', 'item_number', 'date')
 tmp_scd = remove_one_day_changes(tmp_scd, 'category_name', 'item_number', 'date')
 
-final_scd_df = create_scd_from_input(spark, tmp_scd, ['item_description', 'item_number', 'category', 'category_name'],
-                                     'date', 'item_number', final_scd_schema)
+final_scd_df = create_scd_from_input(tmp_scd, ['item_description', 'item_number', 'category', 'category_name'],
+                                     'date', 'item_number')
 
 final_scd_df = final_scd_df.withColumnsRenamed({
     'item_description': 'ItemName',
