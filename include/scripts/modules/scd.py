@@ -83,9 +83,8 @@ def get_oldest_records_from_scd(scd_df: DataFrame, attributes_cols_without_natur
 
 # W przypadku kiedy mamy nowy rekord z inną wartością i jest tylko jeden
 def merge_last_scd_record_with_oldest_scd_record_from_new_data_both_having_different_attibutes(
-        spark: SparkSession, old_scd: DataFrame,
-          new_scd: DataFrame, attributes_cols: List[str],
-          natural_key_column: str,
+         old_scd: DataFrame, new_scd: DataFrame,
+           attributes_cols: List[str], natural_key_column: str,
           split_result: bool = False) -> DataFrame | Tuple[DataFrame, DataFrame]:
 
     current_records_old_scd = old_scd.where("is_current == TRUE")
@@ -114,9 +113,8 @@ def merge_last_scd_record_with_oldest_scd_record_from_new_data_both_having_diffe
 
 
 def merge_last_scd_record_with_scd_records_from_new_data_both_having_different_attibutes(
-        spark: SparkSession, old_scd: DataFrame,
-          new_scd: DataFrame, attributes_cols: List[str],
-            natural_key_column: str,
+        old_scd: DataFrame, new_scd: DataFrame,
+          attributes_cols: List[str], natural_key_column: str,
             split_result: bool = False) -> DataFrame:
 
     attributes_cols_without_natural_key = copy(attributes_cols)
@@ -147,7 +145,7 @@ def merge_last_scd_record_with_scd_records_from_new_data_both_having_different_a
 
 # najstarszy rekord z nowego scd ma takie same wartości atrybutów jak najnowszy ze startego scd 
 def merge_last_scd_record_with_scd_records_from_new_data_both_having_same_attibutes(
-        spark: SparkSession, old_scd: DataFrame,
+        old_scd: DataFrame,
           new_scd: DataFrame, attributes_cols: List[str],
           natural_key_column: str,
           split_result: bool = False) -> DataFrame | Tuple[DataFrame, DataFrame]:

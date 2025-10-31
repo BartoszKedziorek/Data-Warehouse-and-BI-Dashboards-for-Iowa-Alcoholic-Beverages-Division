@@ -160,7 +160,7 @@ scd_entries_with_not_only_new_entries = replace_hash_with_attributes(scd_entries
 
 
 to_update, to_insert = merge_last_scd_record_with_scd_records_from_new_data_both_having_same_attibutes(
-    spark, old_scd, scd_entries_with_not_only_new_entries,
+    old_scd, scd_entries_with_not_only_new_entries,
     attrib_cols, 'store_number', split_result=True
 )
 
@@ -202,7 +202,7 @@ to_insert.withColumnsRenamed(columns_mapping) \
 
 
 to_update, to_insert = merge_last_scd_record_with_oldest_scd_record_from_new_data_both_having_different_attibutes(
-    spark, old_scd, scd_entries_with_only_one_new_entry,
+    old_scd, scd_entries_with_only_one_new_entry,
     attrib_cols, 'store_number', split_result=True
 )
 
@@ -219,7 +219,7 @@ to_insert.withColumnsRenamed(columns_mapping) \
 
 
 to_update, to_insert = merge_last_scd_record_with_scd_records_from_new_data_both_having_different_attibutes(
-    spark, old_scd, scd_entries_with_only_more_new_entries,
+    old_scd, scd_entries_with_only_more_new_entries,
     attrib_cols, 'store_number', split_result=True
 )
 

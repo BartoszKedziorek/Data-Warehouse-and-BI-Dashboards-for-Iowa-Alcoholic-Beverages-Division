@@ -238,7 +238,7 @@ class TestSCD:
         )
 
         merged_scd = merge_last_scd_record_with_oldest_scd_record_from_new_data_both_having_different_attibutes(
-            self.spark, old_scd, new_scd, self.attributes_cols, 'store_number')
+            old_scd, new_scd, self.attributes_cols, 'store_number')
 
         first_record = merged_scd.where(F.col('start_date') == F.lit('2024-11-27')).collect()[0]
         second_record = merged_scd.where(F.col('start_date') == F.lit('2024-12-12')).collect()[0]        
@@ -323,7 +323,7 @@ class TestSCD:
         )
 
         merged_scd = merge_last_scd_record_with_scd_records_from_new_data_both_having_different_attibutes(
-            self.spark,old_scd, new_scd, self.attributes_cols, 'store_number')
+            old_scd, new_scd, self.attributes_cols, 'store_number')
         
         first_record = merged_scd.where(F.col('start_date') == F.lit('2024-11-27')).collect()[0]
         merged_scd.cache()
@@ -391,7 +391,7 @@ class TestSCD:
         )
 
         merged_scd = merge_last_scd_record_with_scd_records_from_new_data_both_having_same_attibutes(
-            self.spark,old_scd, new_scd, self.attributes_cols, 'store_number')
+            old_scd, new_scd, self.attributes_cols, 'store_number')
         
     
         first_scd_record = merged_scd.where(F.col('start_date') == F.to_date(F.lit('2024-11-27'))).collect()[0]
