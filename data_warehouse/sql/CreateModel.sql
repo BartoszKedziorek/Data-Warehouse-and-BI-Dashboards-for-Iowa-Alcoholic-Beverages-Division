@@ -64,9 +64,9 @@ CREATE TABLE DimStore(
 );
 
 ALTER TABLE dbo.DimStore
-ADD StoreLocationLongitude DECIMAL(19,15) NOT NULL;
+ADD StoreLocationLongitude DECIMAL(9, 5) NOT NULL;
 ALTER TABLE dbo.DimStore
-ADD StoreLocationLatitude DECIMAL(17,15) NOT NULL;
+ADD StoreLocationLatitude DECIMAL(9, 5) NOT NULL;
 
 ALTER TABLE dbo.DimStore
 ADD CONSTRAINT UQ_DimStoreSCD2 UNIQUE (StoreNumberDK, StoreName,
