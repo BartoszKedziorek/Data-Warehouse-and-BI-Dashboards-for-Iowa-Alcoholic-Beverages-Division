@@ -23,6 +23,15 @@ from pyspark.sql import functions as F
 from airflow.sdk import Variable
 from sqlalchemy import text
 
+spark_submit_common_args={
+    'conn_id':'spark_cluster',
+    'deploy_mode':'cluster',
+    'verbose':True,
+    'files':'/opt/hadoop/etc/hadoop/yarn-site.xml,/opt/hadoop/etc/hadoop/core-site.xml,/usr/local/airflow/include/secrets/google-api-key.json#gcp-key.json',
+    'py_files':'/usr/local/airflow/include/scripts.zip',
+    'jars':'jars/sqljdbc_13.2/enu/jars/mssql-jdbc-13.2.0.jre11.jar'
+}
+
 @dag(
     start_date=datetime(2024, 1, 1),
     schedule="@daily",
@@ -148,24 +157,16 @@ def ingest_data():
     download_full_dataset = SparkSubmitOperator(
         task_id='submit_download_full_dataset',
         application='/usr/local/airflow/include/scripts/download_full_dataset.py',
-        conn_id='spark_cluster',
         env_vars={"GOOGLE_APPLICATION_CREDENTIALS": google_auth_credentials_env},
-        deploy_mode='cluster',
-        verbose=True,
-        files='/opt/hadoop/etc/hadoop/yarn-site.xml,/opt/hadoop/etc/hadoop/core-site.xml,/usr/local/airflow/include/secrets/google-api-key.json#gcp-key.json',
-        py_files='/usr/local/airflow/include/scripts.zip',
+        **spark_submit_common_args
     )
 
     download_new_records_from_dataset = SparkSubmitOperator(
         task_id='download_new_records_from_dataset',
         application='/usr/local/airflow/include/scripts/download_new_records_from_dataset.py',
-        conn_id='spark_cluster',
         env_vars={"GOOGLE_APPLICATION_CREDENTIALS": google_auth_credentials_env},
         application_args=[Variable.get('max_date_data_warehouse'),],
-        deploy_mode='cluster',
-        verbose=True,
-        files='/opt/hadoop/etc/hadoop/yarn-site.xml,/opt/hadoop/etc/hadoop/core-site.xml,/usr/local/airflow/include/secrets/google-api-key.json#gcp-key.json',
-        py_files='/usr/local/airflow/include/scripts.zip',
+        **spark_submit_common_args
     )
 
     with TaskGroup('load_full_data_into_warehouse') as load_full_data_into_warehouse:
@@ -175,15 +176,8 @@ def ingest_data():
             create_store_dim = SparkSubmitOperator(
                 task_id='create_store_dim',
                 application='/usr/local/airflow/include/scripts/create_store_dim.py',
-                conn_id='spark_cluster',
-                deploy_mode='cluster',
                 application_args=[host, str(port), database, username, password],
-                executor_memory='1024m',
-                driver_memory='1024m',
-                verbose=True,
-                files='/opt/hadoop/etc/hadoop/yarn-site.xml,/opt/hadoop/etc/hadoop/core-site.xml,/usr/local/airflow/include/secrets/google-api-key.json#gcp-key.json',
-                py_files='/usr/local/airflow/include/scripts.zip',
-                jars='jars/sqljdbc_13.2/enu/jars/mssql-jdbc-13.2.0.jre11.jar'
+                **spark_submit_common_args
             )
 
             insert_default_value_store_dim = SQLExecuteQueryOperator(
@@ -198,13 +192,8 @@ def ingest_data():
             create_item_dim = SparkSubmitOperator(
                 task_id='create_item_dim',
                 application='/usr/local/airflow/include/scripts/create_item_dim.py',
-                conn_id='spark_cluster',
-                deploy_mode='cluster',
                 application_args=[host, str(port), database, username, password],
-                verbose=True,
-                files='/opt/hadoop/etc/hadoop/yarn-site.xml,/opt/hadoop/etc/hadoop/core-site.xml,/usr/local/airflow/include/secrets/google-api-key.json#gcp-key.json',
-                py_files='/usr/local/airflow/include/scripts.zip',
-                jars='jars/sqljdbc_13.2/enu/jars/mssql-jdbc-13.2.0.jre11.jar'
+                **spark_submit_common_args
             )
 
             insert_default_value_item_dim = SQLExecuteQueryOperator(
@@ -219,13 +208,8 @@ def ingest_data():
             create_vendor_dim = SparkSubmitOperator(
                 task_id='create_vendor_dim',
                 application='/usr/local/airflow/include/scripts/create_vendor_dim.py',
-                conn_id='spark_cluster',
-                deploy_mode='cluster',
                 application_args=[host, str(port), database, username, password],
-                verbose=True,
-                files='/opt/hadoop/etc/hadoop/yarn-site.xml,/opt/hadoop/etc/hadoop/core-site.xml,/usr/local/airflow/include/secrets/google-api-key.json#gcp-key.json,',
-                py_files='/usr/local/airflow/include/scripts.zip',
-                jars='jars/sqljdbc_13.2/enu/jars/mssql-jdbc-13.2.0.jre11.jar'
+                **spark_submit_common_args
             )
 
             insert_default_value_vendor_dim = SQLExecuteQueryOperator(
@@ -405,12 +389,8 @@ def ingest_data():
         create_liqour_sales_fact_table = SparkSubmitOperator(
             task_id='create_liqour_sales_fact_table',
             application='/usr/local/airflow/include/scripts/create_liqour_sales_fact_table.py',
-            conn_id='spark_cluster',
-            deploy_mode='cluster',
             application_args=[host, str(port), database, username, password],    
-            verbose=True,
-            files='/opt/hadoop/etc/hadoop/yarn-site.xml,/opt/hadoop/etc/hadoop/core-site.xml,/usr/local/airflow/include/secrets/google-api-key.json#gcp-key.json',
-            jars='jars/sqljdbc_13.2/enu/jars/mssql-jdbc-13.2.0.jre11.jar'
+            **spark_submit_common_args
         )
         
         create_store_dim_task >> create_item_dim_task >> create_vendor_dim_task \
@@ -421,14 +401,9 @@ def ingest_data():
         update_store_dim = SparkSubmitOperator(
             task_id='update_store_dim',
             application='/usr/local/airflow/include/scripts/update_store_dim.py',
-            conn_id='spark_cluster',
-            deploy_mode='cluster',
             application_args=[host, str(port), database, username, password],    
-            verbose=True,
-            files='/opt/hadoop/etc/hadoop/yarn-site.xml,/opt/hadoop/etc/hadoop/core-site.xml,/usr/local/airflow/include/secrets/google-api-key.json#gcp-key.json',
-            jars='jars/sqljdbc_13.2/enu/jars/mssql-jdbc-13.2.0.jre11.jar',
-            py_files='/usr/local/airflow/include/scripts.zip',
-            trigger_rule='none_failed_min_one_success'
+            trigger_rule='none_failed_min_one_success',
+            **spark_submit_common_args
         )
 
         # update_vendor_dim = SparkSubmitOperator(
