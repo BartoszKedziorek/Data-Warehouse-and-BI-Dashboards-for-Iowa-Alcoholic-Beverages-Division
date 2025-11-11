@@ -36,9 +36,10 @@ spark_submit_common_args={
     start_date=datetime(2024, 1, 1),
     schedule="@daily",
     catchup=False,
-    template_searchpath="/usr/local/airflow/include/scripts/sql"
+    template_searchpath="/usr/local/airflow/include/scripts/sql",
+    dag_display_name='Main pipeline'
 )
-def ingest_data():
+def main_pipeline():
 
     conn: Connection =  BaseHook.get_connection('data_warehouse_presentation_layer')
     host = conn.host
@@ -556,4 +557,4 @@ def ingest_data():
     
 
 
-ingest_data()
+main_pipeline()
