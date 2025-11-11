@@ -80,6 +80,7 @@ def main_pipeline():
         query = """
         SELECT TOP 1 DateId FROM dbo.FLiquorSales 
         """
+
         result = conn.execute(query).fetchone()
     
         if result is None:
@@ -393,7 +394,7 @@ def main_pipeline():
             application_args=[host, str(port), database, username, password],    
             **spark_submit_common_args
         )
-        
+
         create_store_dim_task >> create_item_dim_task >> create_vendor_dim_task \
             >> create_county_dim_task >> create_packaging_dim_task >> create_date_table_task \
             >> create_liqour_sales_fact_table
@@ -407,18 +408,21 @@ def main_pipeline():
             **spark_submit_common_args
         )
 
-        # update_vendor_dim = SparkSubmitOperator(
-        #     task_id='update_vendor_dim',
-        #     application='/usr/local/airflow/include/scripts/update_vendor_dim.py',
-        #     conn_id='spark_cluster',
-        #     deploy_mode='cluster',
-        #     application_args=[host, str(port), database, username, password],    
-        #     verbose=True,
-        #     files='/opt/hadoop/etc/hadoop/yarn-site.xml,/opt/hadoop/etc/hadoop/core-site.xml,/usr/local/airflow/include/secrets/google-api-key.json#gcp-key.json',
-        #     jars='jars/sqljdbc_13.2/enu/jars/mssql-jdbc-13.2.0.jre11.jar',
-        #     py_files='/usr/local/airflow/include/scripts.zip',
-        #     trigger_rule='none_failed_min_one_success'
-        # )
+        update_vendor_dim = SparkSubmitOperator(
+            task_id='update_vendor_dim',
+            application='/usr/local/airflow/include/scripts/update_vendor_dim.py',
+            application_args=[host, str(port), database, username, password],
+            **spark_submit_common_args,    
+            trigger_rule='none_failed_min_one_success'
+        )
+
+        update_item_dim = SparkSubmitOperator(
+            task_id='update_item_dim',
+            application='/usr/local/airflow/include/scripts/update_item_dim.py',
+            application_args=[host, str(port), database, username, password],
+            **spark_submit_common_args,    
+            trigger_rule='none_failed_min_one_success'
+        )
         
         # @task
         # def update_packaging_dim():
@@ -523,7 +527,7 @@ def main_pipeline():
         #         new_records.to_sql('DimCounty', con=engine, schema='dbo', if_exists='append', index=False)
 
 
-        update_store_dim
+        update_store_dim >> update_vendor_dim >> update_item_dim
 
 
     skip_download_task = skip_download()
