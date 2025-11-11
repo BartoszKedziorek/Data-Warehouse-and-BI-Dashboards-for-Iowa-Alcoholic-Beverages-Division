@@ -10,7 +10,7 @@ from scripts.modules.ingest_utils import download_data_from_bq
 
 values = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
 
-spark = SparkSession.builder \
+spark: SparkSession = SparkSession.builder \
     .appName("Iowa Sales ETL") \
     .getOrCreate()
 

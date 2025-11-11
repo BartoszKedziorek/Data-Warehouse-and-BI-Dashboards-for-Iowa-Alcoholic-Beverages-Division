@@ -11,7 +11,7 @@ import sys
 
 values = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
 
-spark = SparkSession.builder \
+spark: SparkSession = SparkSession.builder \
     .appName("Iowa Sales ETL") \
     .getOrCreate()
 
@@ -29,5 +29,10 @@ WHERE t.date > '{start_date}'
 """
 
 dest_path = 'ingest/new_sales/'
+
+jsc = spark._jsc
+hdfs_fs = spark.sparkContext._jvm.org.apache.hadoop.fs.FileSystem.get(jsc.hadoopConfiguration())
+if hdfs_fs.exists(spark.sparkContext._jvm.org.apache.hadoop.fs.Path(dest_path)):
+    hdfs_fs.delete(spark.sparkContext._jvm.org.apache.hadoop.fs.Path(dest_path))
 
 download_data_from_bq(spark, client, query, dest_path, 'append')

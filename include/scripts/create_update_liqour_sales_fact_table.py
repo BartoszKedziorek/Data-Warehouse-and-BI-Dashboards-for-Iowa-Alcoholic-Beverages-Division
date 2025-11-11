@@ -84,7 +84,13 @@ spark: SparkSession = SparkSession.builder \
     .getOrCreate()
 
 
-sales_df: DataFrame = spark.read.parquet('ingest/raw_sales')
+operation = sys.argv[6]
+
+if operation == 'update':
+    sales_df: DataFrame = spark.read.parquet('ingest/new_sales')
+elif operation == 'create':
+    sales_df: DataFrame = spark.read.parquet('ingest/raw_sales')
+    
 
 sales_df = sales_df.where('sale_dollars > 0 AND sale_dollars IS NOT NULL')
 sales_df = sales_df.where('bottles_sold > 0')

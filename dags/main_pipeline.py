@@ -115,7 +115,7 @@ def main_pipeline():
         max_date_data_warehouse: datetime = conn.execute(dw_query).fetchone()[0]
 
         Variable.set('max_date_data_warehouse', max_date_data_warehouse.strftime('%Y-%m-%d'))
-
+        
         return max_date_hdfs > max_date_data_warehouse
 
 
@@ -390,8 +390,8 @@ def main_pipeline():
 
         create_liqour_sales_fact_table = SparkSubmitOperator(
             task_id='create_liqour_sales_fact_table',
-            application='/usr/local/airflow/include/scripts/create_liqour_sales_fact_table.py',
-            application_args=[host, str(port), database, username, password],    
+            application='/usr/local/airflow/include/scripts/create_update_liqour_sales_fact_table.py',
+            application_args=[host, str(port), database, username, password, 'create'],    
             **spark_submit_common_args
         )
 
@@ -424,110 +424,98 @@ def main_pipeline():
             trigger_rule='none_failed_min_one_success'
         )
         
-        # @task
-        # def update_packaging_dim():
+        @task(trigger_rule='none_failed_min_one_success')
+        def update_packaging_dim():
         
-        #     client = bigquery.Client()
+            client = bigquery.Client()
 
-        #     query = """
-        #         SELECT nr.pack as `NumberOfBottlesInPack`,
-        #             vol.bottle_volume_ml as `BottleVolumeML`
-        #         FROM (SELECT DISTINCT pack  FROM `bigquery-public-data.iowa_liquor_sales.sales`) as `nr`
-        #         CROSS JOIN
-        #         (SELECT DISTINCT bottle_volume_ml  FROM `bigquery-public-data.iowa_liquor_sales.sales`) as `vol`
-        #     """
+            query = """
+                SELECT nr.pack as `NumberOfBottlesInPack`,
+                    vol.bottle_volume_ml as `BottleVolumeML`
+                FROM (SELECT DISTINCT pack  FROM `bigquery-public-data.iowa_liquor_sales.sales`) as `nr`
+                CROSS JOIN
+                (SELECT DISTINCT bottle_volume_ml  FROM `bigquery-public-data.iowa_liquor_sales.sales`) as `vol`
+            """
 
-        #     query_job = client.query(query)
+            query_job = client.query(query)
 
-        #     result = query_job.result()
+            result = query_job.result()
 
-        #     df = result.to_dataframe()
+            df = result.to_dataframe()
 
-        #     connection_string = f'DRIVER={{/opt/microsoft/msodbcsql18/lib64/libmsodbcsql-18.5.so.1.1}};SERVER={host},{port};DATABASE={database};UID={username};PWD={password};TrustServerCertificate=yes'
+            connection_string = f'DRIVER={{/opt/microsoft/msodbcsql18/lib64/libmsodbcsql-18.5.so.1.1}};SERVER={host},{port};DATABASE={database};UID={username};PWD={password};TrustServerCertificate=yes'
 
-        #     connection_url = f"mssql+pyodbc:///?odbc_connect={connection_string}"
+            connection_url = f"mssql+pyodbc:///?odbc_connect={connection_string}"
 
-        #     engine: Engine = create_engine(connection_url, fast_executemany=True)
+            engine: Engine = create_engine(connection_url, fast_executemany=True)
 
-        #     query = "SELECT NumberOfBottlesInPack, BottleVolumeML FROM dbo.DimPackaging"
+            query = "SELECT NumberOfBottlesInPack, BottleVolumeML FROM dbo.DimPackaging"
 
-        #     packaging_dim_database = pd.read_sql(query, engine) 
+            packaging_dim_database = pd.read_sql(query, engine) 
 
-        #     merge_df = pd.merge(left=df,
-        #                         right=packaging_dim_database,
-        #                         how='left',
-        #                         left_on=['NumberOfBottlesInPack','BottleVolumeML'],
-        #                         right_on=['NumberOfBottlesInPack','BottleVolumeML'],
-        #                         suffixes=('_l','_r')
-        #                         )
-
+            merge_df = pd.merge(left=df,
+                                right=packaging_dim_database,
+                                how='outer',
+                                left_on=['NumberOfBottlesInPack','BottleVolumeML'],
+                                right_on=['NumberOfBottlesInPack','BottleVolumeML'],
+                                indicator=True
+                                )
+            
+            new_records = merge_df[merge_df['_merge'] == 'left_only'].drop('_merge', axis=1)
         
-        #     if len(new_records) != 0:
-                
-        #         new_records = merge_df.iloc[merge_df['NumberOfBottlesInPack_r'].isnull()]
+            if len(new_records) != 0:
+                new_records.to_sql('DimPackaging', con=engine, schema='dbo', if_exists='append', index=False)
 
-        #         new_records = new_records.drop('NumberOfBottlesInPack_r', axis=1)
-        #         new_records = new_records.drop('BottleVolumeML_r', axis=1)
-
-        #         new_records = new_records.rename({
-        #             'NumberOfBottlesInPack_l':'NumberOfBottlesInPack',
-        #             'BottleVolumeML_l':'BottleVolumeML'
-        #         })
-
-        #         new_records.to_sql('DimPackaging', con=engine, schema='dbo', if_exists='append', index=False)
  
-        # @task
-        # def update_county_dim():
-        #     client = bigquery.Client()
+        @task(trigger_rule='none_failed_min_one_success')
+        def update_county_dim():
+            client = bigquery.Client()
 
-        #     query = """
-        #         SELECT county as `CountyName`, county_number as `CountyNumber`
-        #         FROM `bigquery-public-data.iowa_liquor_sales.sales` 
-        #         WHERE county_number IS NOT NULL
-        #         GROUP BY county, county_number
-        #     """
+            query = """
+                SELECT county as `CountyName`, county_number as `CountyNumber`
+                FROM `bigquery-public-data.iowa_liquor_sales.sales` 
+                WHERE county_number IS NOT NULL
+                GROUP BY county, county_number
+            """
 
-        #     query_job = client.query(query)
+            query_job = client.query(query)
 
-        #     result = query_job.result()
+            result = query_job.result()
 
-        #     df = result.to_dataframe()
+            df = result.to_dataframe()
 
-        #     connection_string = f'DRIVER={{/opt/microsoft/msodbcsql18/lib64/libmsodbcsql-18.5.so.1.1}};SERVER={host},{port};DATABASE={database};UID={username};PWD={password};TrustServerCertificate=yes'
+            connection_string = f'DRIVER={{/opt/microsoft/msodbcsql18/lib64/libmsodbcsql-18.5.so.1.1}};SERVER={host},{port};DATABASE={database};UID={username};PWD={password};TrustServerCertificate=yes'
 
-        #     connection_url = f"mssql+pyodbc:///?odbc_connect={connection_string}"
+            connection_url = f"mssql+pyodbc:///?odbc_connect={connection_string}"
 
-        #     engine: Engine = create_engine(connection_url, fast_executemany=True)
+            engine: Engine = create_engine(connection_url, fast_executemany=True)
 
-        #     query = "SELECT CountyName, CountyNumber FROM dbo.DimCounty"
+            query = "SELECT CountyName, CountyNumber FROM dbo.DimCounty"
 
-        #     county_dim_database = pd.read_sql(query, engine) 
+            county_dim_database = pd.read_sql(query, engine) 
 
-        #     merge_df = pd.merge(left=df,
-        #                         right=county_dim_database,
-        #                         how='left',
-        #                         left_on=['CountyName','CountyNumber'],
-        #                         right_on=['CountyName','CountyNumber'],
-        #                         suffixes=('_l','_r')
-        #                         )
-
+            merge_df = pd.merge(left=df,
+                                right=county_dim_database,
+                                how='outer',
+                                left_on=['CountyName','CountyNumber'],
+                                right_on=['CountyName','CountyNumber'],
+                                indicator=True
+                                )
+            
+            new_records = merge_df[merge_df['_merge'] == 'left_only'].drop('_merge', axis=1)
         
-        #     if len(new_records) != 0:
-                
-        #         new_records = merge_df.iloc[merge_df['CountyName_r'].isnull()]
+            if len(new_records) != 0:
+                new_records.to_sql('DimCounty', con=engine, schema='dbo', if_exists='append', index=False)
 
-        #         new_records = new_records.drop('CountyName_r', axis=1)
-        #         new_records = new_records.drop('CountyNumber_r', axis=1)
+        update_liqour_sales_fact_table = SparkSubmitOperator(
+            task_id='update_liqour_sales_fact_table',
+            application='/usr/local/airflow/include/scripts/create_update_liqour_sales_fact_table.py',
+            application_args=[host, str(port), database, username, password, 'update'],    
+            **spark_submit_common_args
+        )
 
-        #         new_records = new_records.rename({
-        #             'CountyNumber_l':'CountyNumber',
-        #             'CountyName_l':'CountyName'
-        #         })
-
-        #         new_records.to_sql('DimCounty', con=engine, schema='dbo', if_exists='append', index=False)
-
-
-        update_store_dim >> update_vendor_dim >> update_item_dim
+        update_store_dim >> update_vendor_dim >> update_item_dim >> update_packaging_dim() >> update_county_dim() \
+             >> update_liqour_sales_fact_table
 
 
     skip_download_task = skip_download()
