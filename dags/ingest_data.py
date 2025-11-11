@@ -124,7 +124,7 @@ def ingest_data():
         bg_query = """
         SELECT MAX(date) as max_date FROM `bigquery-public-data.iowa_liquor_sales.sales`
         """
-        
+
         max_date_bq = client.query(bg_query).result().to_dataframe()['max_date'].iloc[0]        
 
         dw_query = """
@@ -412,7 +412,7 @@ def ingest_data():
             files='/opt/hadoop/etc/hadoop/yarn-site.xml,/opt/hadoop/etc/hadoop/core-site.xml,/usr/local/airflow/include/secrets/google-api-key.json#gcp-key.json',
             jars='jars/sqljdbc_13.2/enu/jars/mssql-jdbc-13.2.0.jre11.jar'
         )
-
+        
         create_store_dim_task >> create_item_dim_task >> create_vendor_dim_task \
             >> create_county_dim_task >> create_packaging_dim_task >> create_date_table_task \
             >> create_liqour_sales_fact_table
@@ -431,6 +431,18 @@ def ingest_data():
             trigger_rule='none_failed_min_one_success'
         )
 
+        # update_vendor_dim = SparkSubmitOperator(
+        #     task_id='update_vendor_dim',
+        #     application='/usr/local/airflow/include/scripts/update_vendor_dim.py',
+        #     conn_id='spark_cluster',
+        #     deploy_mode='cluster',
+        #     application_args=[host, str(port), database, username, password],    
+        #     verbose=True,
+        #     files='/opt/hadoop/etc/hadoop/yarn-site.xml,/opt/hadoop/etc/hadoop/core-site.xml,/usr/local/airflow/include/secrets/google-api-key.json#gcp-key.json',
+        #     jars='jars/sqljdbc_13.2/enu/jars/mssql-jdbc-13.2.0.jre11.jar',
+        #     py_files='/usr/local/airflow/include/scripts.zip',
+        #     trigger_rule='none_failed_min_one_success'
+        # )
         
         # @task
         # def update_packaging_dim():

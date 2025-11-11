@@ -19,6 +19,8 @@ def download_data_from_bq(spark: SparkSession, bq_client: bigquery.Client, query
     dataframes = result.to_dataframe_iterable()
 
     schema = StructType([
+        StructField('store_location_long', StringType(), True),
+        StructField('store_location_lat', StringType(), True),
         StructField('invoice_and_item_number', StringType(), False),
         StructField('date', DateType(), False),
         StructField('store_number', IntegerType(), False),
@@ -26,7 +28,6 @@ def download_data_from_bq(spark: SparkSession, bq_client: bigquery.Client, query
         StructField('address', StringType(), True),
         StructField('city', StringType(), True),
         StructField('zip_code', IntegerType(), True),
-        StructField('store_location', StringType(), True),
         StructField('county_number', IntegerType(), True),
         StructField('county', StringType(), True),
         StructField('category', IntegerType(), False),

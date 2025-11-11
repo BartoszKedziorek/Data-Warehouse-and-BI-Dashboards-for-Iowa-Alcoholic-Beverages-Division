@@ -21,9 +21,11 @@ start_date = sys.argv[1]
 print(f'start_date = {start_date}')
 
 query = f"""
-SELECT * FROM
-`bigquery-public-data.iowa_liquor_sales.sales`
-WHERE date > '{start_date}'
+SELECT FORMAT('%.4f', ST_X(t.store_location)) as store_location_long,
+   FORMAT('%.4f', ST_Y(t.store_location)) as store_location_lat,
+   t.* EXCEPT(store_location)
+FROM `bigquery-public-data.iowa_liquor_sales.sales` as t
+WHERE t.date > '{start_date}'
 """
 
 dest_path = 'ingest/new_sales/'

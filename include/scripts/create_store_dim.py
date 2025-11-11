@@ -1,6 +1,6 @@
 from datetime import datetime
 from pyspark.sql import SparkSession, DataFrame
-from pyspark.sql.types import StructField, StringType, StructType, IntegerType, DateType, BooleanType
+from pyspark.sql.types import StructField, StringType, StructType, IntegerType, DateType, BooleanType, DecimalType
 import pyspark.sql.functions as F
 from pyspark.sql import functions as F
 import sys
@@ -20,7 +20,8 @@ final_scd_schema = StructType([
     StructField('address', StringType(), False),
     StructField('city', StringType(), False),
     StructField('zip_code', IntegerType(), False),
-    StructField('store_location', StringType(), False),
+    StructField('store_location_lat', DecimalType(9, 5), False),
+    StructField('store_location_long', DecimalType(9, 5), False),
     StructField('start_date', DateType(), False),
     StructField('end_date', DateType(), True),
     StructField('is_current', BooleanType(), True)
@@ -31,16 +32,20 @@ final_scd_df = spark.createDataFrame([], schema=final_scd_schema)
 tmp_scd = tmp_scd.fillna({'address':'unknown',
                           'city':'unknown',
                           'zip_code': -1,
-                          'store_location': 'POINT EMPTY'})
+                          'store_location_lat': -1.0,
+                          'store_location_long': -1.0})
 
-tmp_scd = remove_one_day_changes(tmp_scd, 'store_location', 'store_number', 'date')
+tmp_scd = remove_one_day_changes(tmp_scd, 'store_location_lat', 'store_number', 'date')
+tmp_scd = remove_one_day_changes(tmp_scd, 'store_location_long', 'store_number', 'date')
 tmp_scd = remove_one_day_changes(tmp_scd, 'store_name', 'store_number', 'date')
 tmp_scd = remove_one_day_changes(tmp_scd, 'address', 'store_number', 'date')
 tmp_scd = remove_one_day_changes(tmp_scd, 'zip_code', 'store_number', 'date')
 tmp_scd = remove_one_day_changes(tmp_scd, 'city', 'store_number', 'date')
 
-final_scd_df = create_scd_from_input(tmp_scd, ['store_number', 'store_location', 'store_name', 'address', 'zip_code', 'city'],
-                                     'date', 'store_number')
+final_scd_df = create_scd_from_input(tmp_scd, ['store_number', 'store_location_lat', 'store_location_long',
+                                                'store_name', 'address', 'zip_code', 'city'],
+                                              'date', 'store_number')
+
 
 final_scd_df = final_scd_df.withColumnsRenamed({
     'store_name': 'StoreName',
@@ -48,22 +53,12 @@ final_scd_df = final_scd_df.withColumnsRenamed({
     'address': 'Address',
     'city':'City',
     'zip_code': 'ZipCode',
-    'store_location': 'StoreLocation',
+    'store_location_lat': 'StoreLocationLatitude',
+    'store_location_long': 'StoreLocationLongitude',
     'start_date':'StartDate',
     'end_date':'EndDate',
     'is_current':'IsCurrent'
 })
-
-long_col = F.expr("CASE WHEN StoreLocation != 'POINT EMPTY' THEN substring(split(StoreLocation, ' ')[0], 7, length(split(StoreLocation, ' ')[0]) - 5)" +
-                  "ELSE '-1.0' END")
-lat_col = F.expr("CASE WHEN StoreLocation != 'POINT EMPTY' THEN substring(split(StoreLocation, ' ')[1], 0, length(split(StoreLocation, ' ')[1]) - 1)" + 
-                 "ELSE '-1.0' END")
-
-final_scd_df = final_scd_df.withColumn(
-    'StoreLocationLongitude', long_col
-).withColumn(
-    'StoreLocationLatitude', lat_col
-)
 
 host = sys.argv[1]
 database = sys.argv[3]
@@ -79,6 +74,5 @@ properties = {
     "encrypt": "false"
 }
 table_name = "DimStore"
-
 
 final_scd_df.write.jdbc(url=url, table=table_name, properties=properties, mode='append')

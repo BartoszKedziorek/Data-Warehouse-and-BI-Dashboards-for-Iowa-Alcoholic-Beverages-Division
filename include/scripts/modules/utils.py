@@ -6,6 +6,8 @@ from copy import copy
 
 
 def replace_attributes_with_hash(df: DataFrame, attributes_cols: List[str]) -> Tuple[DataFrame, DataFrame]:
+    attributes_cols = sorted(attributes_cols)
+
     hash_math_df = df.select(*attributes_cols) \
                      .withColumn('hashed_attributes_value', F.hash(*attributes_cols))
     

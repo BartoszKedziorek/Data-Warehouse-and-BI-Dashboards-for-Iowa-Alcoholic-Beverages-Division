@@ -226,56 +226,87 @@ def filter_scd_by_natural_key(scd: DataFrame, natural_keys_dataframe: DataFrame,
                                    F.col('t1.end_date').alias('end_date'),
                                    F.col('t1.is_current').alias('is_current'))
 
-# def update_scd_table(input_records: DataFrame, attrib_columns: List[str], natural_key_col: str,
-#                      final_scd_schema: StructType,
-#                      engine: Engine, jdbc_url: str, df_to_database_columns_mapping: Dict[str, str]):
-#     new_scd_reords_df = create_scd_from_input(spark, tmp_scd, attrib_cols,
-#                                      'date', 'store_number', final_scd_schema)
 
-#     new_scd_reords_df, hash_table_new_scd = replace_attributes_with_hash(new_scd_reords_df, ['store_location',
-#                                                                                             'store_name', 'address',
-#                                                                                                 'zip_code', 'city'])
+def get_scd_records_for_update_and_insert(old_scd: DataFrame, new_records: DataFrame,
+                                           natural_key_col: str, date_col: str,
+                                           attributes_cols: List[str]) -> Tuple[DataFrame, DataFrame]:
+    artificial_old_records = old_scd.select(*(attributes_cols + ['start_date']))
+    artificial_old_records = artificial_old_records.withColumnRenamed('start_date', date_col)
+ 
+    new_records = new_records.select(*(attributes_cols + [date_col]))
 
-#     old_scd = spark.read.jdbc(url=url_jdbc, table=table_name, properties=properties)
+    all_records = artificial_old_records.unionByName(new_records)
 
-#     old_scd = old_scd.withColumnsRenamed({
-#         'StoreNumberDK': 'store_number',
-#         'StoreName':'store_name',
-#         'StoreLocation':'store_location',
-#         'City':'city',
-#         'Address':'address',
-#         'ZipCode':'zip_code',
-#         'StartDate':'start_date',
-#         'EndDate':'end_date',
-#         'IsCurrent':'is_current'
-#     })
+    new_scd = create_scd_from_input(all_records, attributes_cols, date_col, natural_key_col)
 
+    old_scd_last_records = old_scd.where('is_current == TRUE')
 
-#     old_scd_last_records = old_scd.alias('os').join(
-#                                     old_scd.groupBy('store_number')
-#                                             .agg(F.max('start_date').alias('start_date'))
-#                                             .alias('os_max'),
-#                                     on=(F.col('os.store_number') == F.col('os_max.store_number'))
-#                                         &
-#                                     (F.col('os.start_date') == F.col('os_max.start_date')),
-#                                     how='inner'
-#                                 ).select(
-#                                     F.col('os.store_number').alias('store_number'), F.col('os.store_name').alias('store_name'),
-#                                     F.col('os.store_location').alias('store_location'), F.col('os.address').alias('address'),
-#                                     F.col('os.city').alias('city'),
-#                                     F.col('os.zip_code').alias('zip_code'), F.col('os.start_date').alias('start_date'),
-#                                     F.col('os.end_date').alias('end_date'), F.col('os.is_current').alias('is_current')
-#                                 )
+    to_update = old_scd_last_records.alias('o').join(
+        new_scd.alias('n'),
+        on=(F.col('o.start_date') == F.col('n.start_date'))
+        &
+        (F.col(f'o.{natural_key_col}') == F.col(f'n.{natural_key_col}')),
+        how = "inner"
+    ).where('n.end_date IS NOT NULL') \
+    .select(
+        *[F.col(f"n.{col}").alias(col) for col in new_scd.columns]
+    )
+
+    to_insert = new_scd.alias('n').join(
+        old_scd.alias('o'),
+        on=(F.col('o.start_date') == F.col('n.start_date'))
+            &
+           (F.col(f'o.{natural_key_col}') == F.col(f'n.{natural_key_col}')),
+        how='leftanti'
+    ).select(
+        *[F.col(f"n.{col}").alias(col) for col in new_scd.columns]
+    )
+
+    return to_update, to_insert
 
 
-#     old_scd_last_records, hash_table_old_scd = replace_attributes_with_hash(old_scd_last_records, ['store_name', 'store_location',
-#                                                                             'address', 'city',
-#                                                                             'zip_code'])
+# def get_scd_records_for_update_and_insert(spark: SparkSession, input_records: DataFrame, attrib_columns: List[str], natural_key_col: str,
+#                        jdbc_url: str, jdbc_conn_properties: Dict[str, str],
+#                          df_to_database_columns_mapping: Dict[str, str],
+#                        dim_table_name_or_select_query: str) -> Tuple[DataFrame, DataFrame]:
+#     new_scd_reords_df = create_scd_from_input(input_records, attrib_columns,
+#                                      'date', natural_key_col)
+    
+#     attrib_columns_without_natural_key = copy(attrib_columns)
+#     attrib_columns_without_natural_key.remove(natural_key_col)
+
+#     new_scd_reords_df, hash_table_new_scd = replace_attributes_with_hash(new_scd_reords_df, attrib_columns_without_natural_key)
+
+#     old_scd = spark.read.jdbc(url=jdbc_url, table=dim_table_name_or_select_query, properties=jdbc_conn_properties)
+    
+#     reverse_mapping = { old_value:old_key for old_key, old_value
+#                         in df_to_database_columns_mapping.items()}
+#     old_scd = old_scd.withColumnsRenamed(reverse_mapping)
+
+#     # old_scd_last_records = old_scd.alias('os').join(
+#     #                                 old_scd.groupBy(natural_key_col)
+#     #                                         .agg(F.max('start_date').alias('start_date'))
+#     #                                         .alias('os_max'),
+#     #                                 on=(F.col(f'os.{natural_key_col}') == F.col(f'os_max.{natural_key_col}'))
+#     #                                     &
+#     #                                 (F.col('os.start_date') == F.col('os_max.start_date')),
+#     #                                 how='inner'
+#     #                             ).select(
+#     #                                 *([F.col(f"os.{col_name}").alias(col_name) for col_name in attrib_columns_without_natural_key] +
+#     #                                   [F.col(f"os.{natural_key_col}").alias(natural_key_col)] +
+#     #                                   [F.col("os.end_date").alias('end_date'), F.col('os.start_date').alias('start_date'),
+#     #                                    F.col('os.is_current').alias('is_current')] )
+#     #                             )
+
+#     old_scd_last_records = old_scd.where("is_current == TRUE")
+
+
+#     old_scd_last_records, _ = replace_attributes_with_hash(old_scd_last_records, attrib_columns_without_natural_key)
 
 #     new_scd_joined_old_scd = old_scd_last_records.alias('os') \
 #                                                 .join(
 #                                                     new_scd_reords_df.alias('ns'),
-#                                                     on='store_number'
+#                                                     on=natural_key_col
 #                                                 )
 
 #     new_scd_joined_old_scd.cache()
@@ -283,7 +314,7 @@ def filter_scd_by_natural_key(scd: DataFrame, natural_keys_dataframe: DataFrame,
 #     new_scd_reords_df_minus_lastest_entries_from_old_scd = new_scd_joined_old_scd.where(
 #                                                                     'os.hashed_attributes_value != ns.hashed_attributes_value'
 #                                                                 ).select(
-#                                                                     F.col('ns.store_number').alias('store_number'),
+#                                                                     F.col(f'ns.{natural_key_col}').alias(natural_key_col),
 #                                                                     F.col('ns.start_date').alias('start_date'),
 #                                                                     F.col('ns.end_date').alias('end_date'),
 #                                                                     F.col('ns.is_current').alias('is_current'),
@@ -292,130 +323,58 @@ def filter_scd_by_natural_key(scd: DataFrame, natural_keys_dataframe: DataFrame,
                                 
 
 #     entries_count_compare_by_store_number = new_scd_reords_df_minus_lastest_entries_from_old_scd.alias('nsm') \
-#                                                 .groupBy('store_number').agg(F.count('*').alias('ct_1')) \
+#                                                 .groupBy(natural_key_col).agg(F.count('*').alias('ct_1')) \
 #                                                 .join(
 #                                                     new_scd_reords_df.alias('ns') \
-#                                                         .groupBy('store_number')
+#                                                         .groupBy(natural_key_col)
 #                                                         .agg(F.count('*').alias('ct_2')),
-#                                                     on='store_number',
+#                                                     on=natural_key_col,
 #                                                     how='inner'
 #                                                 )
 
 #     entries_count_compare_by_store_number.cache()
 
 #     stores_with_only_new_entries = entries_count_compare_by_store_number.where('ct_1 == ct_2') \
-#                                                                     .select(F.col('ns.store_number').alias('store_number'),
+#                                                                     .select(F.col(f'ns.{natural_key_col}').alias(natural_key_col),
 #                                                                             F.col('ct_2').alias('ct'))
 #     stores_with_only_new_entries.cache()
 
 
-#     stores_with_only_one_new_entry = stores_with_only_new_entries.where('ct == 1').select('store_number')
-#     stores_with_only_more_new_entries = stores_with_only_new_entries.where('ct != 1').select('store_number')
+#     stores_with_only_one_new_entry = stores_with_only_new_entries.where('ct == 1').select(natural_key_col)
+#     stores_with_only_more_new_entries = stores_with_only_new_entries.where('ct != 1').select(natural_key_col)
 
 
-#     stores_with_not_only_new_entries = entries_count_compare_by_store_number.where('ct_1 != ct_2') \
-#                                                                         .select(F.col('ns.store_number').alias('store_number'))
+#     stores_with_not_only_new_entries = entries_count_compare_by_store_number.where('ct_1 != ct_2 AND ct_1 != 0') \
+#                                                                         .select(F.col(f'ns.{natural_key_col}').alias(natural_key_col))
 
-#     scd_entries_with_only_one_new_entry = filter_scd_by_natural_key(new_scd_reords_df, stores_with_only_one_new_entry, 'store_number')
-#     scd_entries_with_only_more_new_entries = filter_scd_by_natural_key(new_scd_reords_df, stores_with_only_more_new_entries, 'store_number')
-#     scd_entries_with_not_only_new_entries = filter_scd_by_natural_key(new_scd_reords_df, stores_with_not_only_new_entries, 'store_number')
+#     scd_entries_with_only_one_new_entry = filter_scd_by_natural_key(new_scd_reords_df, stores_with_only_one_new_entry, natural_key_col)
+#     scd_entries_with_only_more_new_entries = filter_scd_by_natural_key(new_scd_reords_df, stores_with_only_more_new_entries, natural_key_col)
+#     scd_entries_with_not_only_new_entries = filter_scd_by_natural_key(new_scd_reords_df, stores_with_not_only_new_entries, natural_key_col)
 
 #     scd_entries_with_only_one_new_entry = replace_hash_with_attributes(scd_entries_with_only_one_new_entry, hash_table_new_scd)
 #     scd_entries_with_only_more_new_entries = replace_hash_with_attributes(scd_entries_with_only_more_new_entries, hash_table_new_scd)
 #     scd_entries_with_not_only_new_entries = replace_hash_with_attributes(scd_entries_with_not_only_new_entries, hash_table_new_scd)
 
 
-#     to_update, to_insert = merge_last_scd_record_with_scd_records_from_new_data_both_having_same_attibutes(
-#         spark, old_scd, scd_entries_with_not_only_new_entries,
-#         attrib_cols, 'store_number', split_result=True
+#     # to_update1, to_insert1 = merge_last_scd_record_with_scd_records_from_new_data_both_having_same_attibutes(
+#     #     old_scd, scd_entries_with_not_only_new_entries,
+#     #     attrib_columns, natural_key_col, split_result=True
+#     # )
+
+#     to_update2, to_insert2 = merge_last_scd_record_with_oldest_scd_record_from_new_data_both_having_different_attibutes(
+#         old_scd, scd_entries_with_only_one_new_entry,
+#         attrib_columns, natural_key_col, split_result=True
 #     )
 
-#     columns_mapping = {
-#         'store_number': 'StoreNumberDK',
-#         'store_name': 'StoreName',
-#         'store_location': 'StoreLocation',
-#         'address': 'Address',
-#         'zip_code': 'ZipCode',
-#         'city': 'City',
-#         'start_date': 'StartDate',
-#         'end_date': 'EndDate',
-#         'is_current': 'IsCurrent',
+#     # to_update3, to_insert3 = merge_last_scd_record_with_scd_records_from_new_data_both_having_different_attibutes(
+#     #     old_scd, scd_entries_with_only_more_new_entries,
+#     #     attrib_columns, natural_key_col, split_result=True
+#     # )
 
-#     } 
+#     # to_update = to_update1.unionByName(to_update2).unionByName(to_update3)
+#     # to_insert = to_insert1.unionByName(to_insert2).unionByName(to_insert3)
 
-#     long_col = F.expr("CASE WHEN StoreLocation != 'POINT EMPTY' THEN substring(split(StoreLocation, ' ')[0], 7, length(split(StoreLocation, ' ')[0]) - 5)" +
-#                     "ELSE '-1.0' END")
-#     lat_col = F.expr("CASE WHEN StoreLocation != 'POINT EMPTY' THEN substring(split(StoreLocation, ' ')[1], 0, length(split(StoreLocation, ' ')[1]) - 1)" + 
-#                     "ELSE '-1.0' END")
+#     return to_update2, to_insert2
 
 
-#     load_update_entries(engine, to_update, 'store_number',
-#                                             'StoreNumberDK', 'DimStore')
-#     to_insert.withColumnsRenamed(columns_mapping) \
-#         .withColumn(
-#             'StoreLocationLongitude', long_col
-#         ).withColumn(
-#             'StoreLocationLatitude', lat_col
-#         ) \
-#         .write.jdbc(url=url_jdbc, table='DimStore', mode='append', properties=properties)
-
-
-
-#     to_update, to_insert = merge_last_scd_record_with_oldest_scd_record_from_new_data_both_having_different_attibutes(
-#         spark, old_scd, scd_entries_with_only_one_new_entry,
-#         attrib_cols, 'store_number', split_result=True
-#     )
-
-#     load_update_entries(engine, to_update, 'store_number',
-#                                             'StoreNumberDK', 'DimStore')
-#     to_insert.withColumnsRenamed(columns_mapping) \
-#         .withColumn(
-#             'StoreLocationLongitude', long_col
-#         ).withColumn(
-#             'StoreLocationLatitude', lat_col
-#         ) \
-#         .write.jdbc(url=url_jdbc, table='DimStore', mode='append', properties=properties)
-
-
-
-#     to_update, to_insert = merge_last_scd_record_with_scd_records_from_new_data_both_having_different_attibutes(
-#         spark, old_scd, scd_entries_with_only_more_new_entries,
-#         attrib_cols, 'store_number', split_result=True
-#     )
-
-#     load_update_entries(engine, to_update, 'store_number',
-#                                             'StoreNumberDK', 'DimStore')
-#     to_insert.withColumnsRenamed(columns_mapping) \
-#         .withColumn(
-#             'StoreLocationLongitude', long_col
-#         ).withColumn(
-#             'StoreLocationLatitude', lat_col
-#         ) \
-#         .write.jdbc(url=url_jdbc, table='DimStore', mode='append', properties=properties)
-
-
-# #potencjalnie można to zrobić razem z poprzedią funkcją
-# def load_update_entries_with_different_attributes(engine: Engine, scd_entries: DataFrame,
-#                                                 natural_key_new_entries: str, natural_key_database: str,
-#                                                 table_name: str):
-    
-#     iter_entries = scd_entries.select(F.col(natural_key_new_entries).alias(natural_key_new_entries),
-#                                       F.col('start_date').alias('start_date'),
-#                                       F.col('end_date').alias('end_date'))
-    
-#     iter_entries = iter_entries.collect()
-
-#     query = """
-#         UPDATE {table}
-#         SET EndDate = {end_date_value}, IsCurrent = CAST(0 as bit) 
-#         WHERE """ + \
-#         natural_key_database + \
-#         """
-#             = {natural_key_value} AND
-#             IsCurrent = CAST(1 as bit)   
-#         """
-    
-#     for entry in iter_entries:
-#         engine.execute(query.format(table=table_name, end_date_value=entry['end_date'],
-#                                     natural_key_value=entry[natural_key_new_entries]))
-        
+   

@@ -17,10 +17,12 @@ spark = SparkSession.builder \
 client = bigquery.Client()
 
 query = """
-SELECT * FROM
-`iowa-sales-analytic-platform.temp_dataset.temp_sales_table`
-WHERE EXTRACT(MONTH FROM date) = 6
-AND EXTRACT(YEAR FROM date) = 2025
+SELECT FORMAT('%.4f', ST_X(t.store_location)) as store_location_long,
+   FORMAT('%.4f', ST_Y(t.store_location)) as store_location_lat,
+   t.* EXCEPT(store_location)
+FROM `bigquery-public-data.iowa_liquor_sales.sales` as t
+WHERE EXTRACT(MONTH FROM t.date) = 6
+AND EXTRACT(YEAR FROM t.date) = 2025
 """
 
 dest_path = 'ingest/raw_sales/'
