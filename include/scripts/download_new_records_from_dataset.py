@@ -30,4 +30,4 @@ WHERE t.date > '{start_date}'
 
 dest_path = 'ingest/new_sales/'
 
-download_data_from_bq(spark, client, query, dest_path, 'overwrite')
+download_data_from_bq(spark, client, query, dest_path, 'append')

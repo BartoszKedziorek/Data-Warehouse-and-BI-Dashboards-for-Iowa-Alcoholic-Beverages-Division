@@ -61,7 +61,7 @@ def download_data_from_bq(spark: SparkSession, bq_client: bigquery.Client, query
 
         df: pd.DataFrame = df.replace([np.nan], [None])
 
-        df_sp = spark.createDataFrame(df, schema=schema)
+        df_sp = spark.createDataFrame(df, schema=schema, verifySchema=True)
 
         df_sp: DataFrame = df_sp.withColumn('state_bottle_cost', df_sp['state_bottle_cost'].cast(DecimalType(precision=7, scale=2)))
         df_sp = df_sp.withColumn('state_bottle_retail', df_sp['state_bottle_retail'].cast(DecimalType(precision=7, scale=2)))
