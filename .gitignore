@@ -13,4 +13,3 @@ airflow.db
 .devcontainer
 **/google-api-key.json
 venv
-README.md
